@@ -606,29 +606,41 @@ def render_midi_to_wav(midi_path: str) -> str:
     if not SF2_PATH.exists():
         raise RuntimeError(f"SoundFont not found: {SF2_PATH}")
     
+    if not Path(midi_path).exists():
+        raise RuntimeError(f"MIDI file not found: {midi_path}")
+    
     # Generate unique output filename
     out_name = f"track_{uuid.uuid4().hex}.wav"
     wav_path = OUT_DIR / out_name
     
     # Run FluidSynth to render MIDI to WAV
-    # Correct syntax: fluidsynth -F output.wav -O s16 -T wav soundfont.sf2 input.mid
+    # Correct syntax: fluidsynth -ni -F output.wav -r 44100 soundfont.sf2 input.mid
+    cmd = [
+        "fluidsynth",
+        "-ni",                   # Non-interactive mode (required for rendering)
+        "-F", str(wav_path),     # Output WAV file (must come before soundfont)
+        "-r", "44100",           # Sample rate
+        str(SF2_PATH.absolute()),  # SoundFont file (absolute path)
+        str(Path(midi_path).absolute()),  # Input MIDI (absolute path)
+    ]
+    
+    print(f"FluidSynth command: {' '.join(cmd)}")
+    
     try:
-        result = subprocess.run([
-            "fluidsynth",
-            "-F", str(wav_path),     # Output WAV file (must come before soundfont)
-            "-O", "s16",             # Output format: signed 16-bit
-            "-T", "wav",             # File type: WAV
-            "-g", "1.0",             # Gain
-            str(SF2_PATH),           # SoundFont file
-            str(midi_path),          # Input MIDI
-        ], check=True, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         
-        print(f"FluidSynth rendered: {wav_path}")
+        print(f"FluidSynth stdout: {result.stdout}")
+        if result.stderr:
+            print(f"FluidSynth stderr: {result.stderr}")
+        print(f"FluidSynth return code: {result.returncode}")
+        
+        # Check if file was created
+        if not wav_path.exists():
+            raise RuntimeError(f"FluidSynth did not create output file. Return code: {result.returncode}, stderr: {result.stderr}")
+        
+        print(f"FluidSynth rendered: {wav_path} ({wav_path.stat().st_size} bytes)")
         return str(wav_path)
         
-    except subprocess.CalledProcessError as e:
-        print(f"FluidSynth error: {e.stderr}")
-        raise RuntimeError(f"FluidSynth rendering failed: {e.stderr}")
     except subprocess.TimeoutExpired:
         raise RuntimeError("FluidSynth rendering timed out")
 
