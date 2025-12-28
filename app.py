@@ -584,7 +584,11 @@ class ConnectionManager:
         print(f"🕶️ Spectacles client disconnected: {client_id}")
     
     async def send_json(self, websocket: WebSocket, data: dict):
-        await websocket.send_json(data)
+        try:
+            await websocket.send_json(data)
+        except Exception as e:
+            print(f"Error sending JSON to client: {e}")
+            raise  # Re-raise to let caller handle
     
     async def broadcast(self, message: dict):
         for connection in self.active_connections:
@@ -744,7 +748,17 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
     try:
         while True:
             # Receive message from Spectacles
-            data = await websocket.receive_json()
+            try:
+                data = await websocket.receive_json()
+            except Exception as e:
+                print(f"Error receiving JSON from {client_id}: {e}")
+                await manager.send_json(websocket, {
+                    "type": "error",
+                    "message": f"Invalid message format: {str(e)}",
+                    "code": "parse_error"
+                })
+                continue
+            
             action = data.get("action", "")
             params = data.get("params", {})
             
@@ -918,9 +932,25 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                 })
     
     except WebSocketDisconnect:
+        print(f"WebSocket disconnected: {client_id}")
         manager.disconnect(websocket, client_id)
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        import traceback
+        error_msg = str(e)
+        error_trace = traceback.format_exc()
+        print(f"WebSocket error for {client_id}: {error_msg}")
+        print(f"Traceback: {error_trace}")
+        
+        # Try to send error message before disconnecting
+        try:
+            await manager.send_json(websocket, {
+                "type": "error",
+                "message": f"Server error: {error_msg}",
+                "code": "internal_error"
+            })
+        except:
+            pass  # Connection may already be closed
+        
         manager.disconnect(websocket, client_id)
 
 
