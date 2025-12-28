@@ -61,8 +61,8 @@ export class PromptDJController extends BaseScriptComponent {
     remoteMediaModule!: RemoteMediaModule
     
     @input
-    @hint("WebSocket backend URL (ws://IP:8123/ws/spectacles/)")
-    backendUrl: string = "ws://172.20.10.3:8123/ws/spectacles/"  // Change to your Mac's IP address
+    @hint("WebSocket backend URL (ws://IP:8123/ws/spectacles/) - Use 127.0.0.1 for Lens Studio Preview, network IP for real Spectacles")
+    backendUrl: string = "ws://127.0.0.1:8123/ws/spectacles/"  // Use 127.0.0.1 for local testing, network IP (e.g., 172.20.10.3) for real Spectacles
     
     @input
     @hint("Audio component for playback")

@@ -15,7 +15,7 @@
 
 //@input Asset.InternetModule internetModule
 //@input Asset.RemoteMediaModule remoteMediaModule {"label":"Remote Media Module"}
-//@input string backendUrl = "ws://172.20.10.3:8123/ws/spectacles/"  // Change to your Mac's IP address
+//@input string backendUrl = "ws://127.0.0.1:8123/ws/spectacles/"  // Use 127.0.0.1 for Lens Studio Preview, network IP (e.g., 172.20.10.3) for real Spectacles
 //@input Component.Text statusText
 //@input Component.Text tempoText
 //@input Component.Text scaleText
