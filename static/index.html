@@ -6,20 +6,23 @@
     <title>PromptDJ | AI Music Generator</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-dark: #0a0a0f;
-            --bg-card: #12121a;
-            --bg-control: #1a1a25;
-            --accent-cyan: #00f5ff;
-            --accent-magenta: #ff00aa;
-            --accent-purple: #8b5cf6;
-            --accent-green: #00ff88;
+            --bg-dark: #0d0d0d;
+            --bg-card: #1a1a1a;
+            --bg-hover: #252525;
+            --accent-purple: #9333ea;
+            --accent-cyan: #06b6d4;
+            --accent-pink: #ec4899;
+            --accent-yellow: #eab308;
+            --accent-green: #22c55e;
+            --accent-orange: #f97316;
+            --accent-blue: #3b82f6;
+            --accent-red: #ef4444;
             --text-primary: #ffffff;
-            --text-secondary: #8888aa;
-            --glow-cyan: 0 0 20px rgba(0, 245, 255, 0.5);
-            --glow-magenta: 0 0 20px rgba(255, 0, 170, 0.5);
+            --text-secondary: #a1a1aa;
+            --border: #27272a;
         }
 
         * {
@@ -29,42 +32,43 @@
         }
 
         body {
-            font-family: 'Rajdhani', sans-serif;
+            font-family: 'Space Grotesk', sans-serif;
             background: var(--bg-dark);
             color: var(--text-primary);
             min-height: 100vh;
-            overflow-x: hidden;
-            background-image: 
-                radial-gradient(ellipse at 20% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
-                radial-gradient(ellipse at 80% 20%, rgba(0, 245, 255, 0.08) 0%, transparent 50%),
-                radial-gradient(ellipse at 50% 50%, rgba(255, 0, 170, 0.05) 0%, transparent 70%);
         }
 
         /* Header */
         .header {
-            padding: 20px 40px;
+            padding: 20px 32px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
+            border-bottom: 1px solid var(--border);
+            background: rgba(13, 13, 13, 0.95);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
 
         .logo {
-            font-family: 'Orbitron', monospace;
-            font-size: 28px;
-            font-weight: 900;
-            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            letter-spacing: 3px;
+            font-size: 24px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
-        .logo-sub {
-            font-size: 11px;
-            color: var(--text-secondary);
-            letter-spacing: 4px;
-            margin-top: -5px;
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
         }
 
         .status-badge {
@@ -72,10 +76,11 @@
             align-items: center;
             gap: 8px;
             padding: 8px 16px;
-            background: var(--bg-control);
-            border-radius: 20px;
-            font-size: 12px;
-            letter-spacing: 1px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            font-size: 13px;
+            font-family: 'JetBrains Mono', monospace;
         }
 
         .status-dot {
@@ -87,714 +92,549 @@
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; box-shadow: 0 0 10px var(--accent-green); }
-            50% { opacity: 0.5; box-shadow: none; }
+            0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--accent-green); }
+            50% { opacity: 0.6; }
         }
 
-        /* Main Container */
+        /* Main */
         .main {
-            max-width: 1200px;
+            max-width: 1000px;
             margin: 0 auto;
-            padding: 40px 20px;
+            padding: 40px 24px;
         }
 
-        /* DJ Deck */
-        .dj-deck {
-            background: var(--bg-card);
-            border-radius: 24px;
-            padding: 40px;
-            border: 1px solid rgba(255,255,255,0.05);
-            box-shadow: 
-                0 25px 50px rgba(0,0,0,0.5),
-                inset 0 1px 0 rgba(255,255,255,0.05);
-        }
-
-        .deck-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 40px;
-        }
-
-        .deck-title {
-            font-family: 'Orbitron', monospace;
+        .section-title {
             font-size: 14px;
+            font-weight: 500;
             color: var(--text-secondary);
-            letter-spacing: 3px;
-        }
-
-        /* Control Grid */
-        .controls-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 24px;
-            margin-bottom: 40px;
-        }
-
-        .control-group {
-            background: var(--bg-control);
-            border-radius: 16px;
-            padding: 24px;
-            border: 1px solid rgba(255,255,255,0.03);
-        }
-
-        .control-label {
-            font-size: 11px;
-            color: var(--text-secondary);
+            text-transform: uppercase;
             letter-spacing: 2px;
-            margin-bottom: 16px;
+            margin-bottom: 20px;
+        }
+
+        /* Genre Grid */
+        .genre-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 40px;
+        }
+
+        @media (max-width: 768px) {
+            .genre-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .genre-btn {
+            aspect-ratio: 1;
+            border-radius: 24px;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 2px solid transparent;
+        }
+
+        .genre-btn:hover {
+            transform: scale(1.02);
+            border-color: rgba(255,255,255,0.2);
+        }
+
+        .genre-btn.active {
+            border-color: white;
+            box-shadow: 0 0 30px rgba(255,255,255,0.2);
+        }
+
+        .genre-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at center, var(--genre-color) 0%, transparent 70%);
+            opacity: 0.15;
+        }
+
+        .genre-knob {
+            width: 60px;
+            height: 60px;
+            background: var(--bg-dark);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            border: 3px solid var(--genre-color);
+            transition: all 0.2s;
+        }
+
+        .genre-btn:hover .genre-knob {
+            box-shadow: 0 0 20px var(--genre-color);
+        }
+
+        .genre-btn.active .genre-knob {
+            background: var(--genre-color);
+            box-shadow: 0 0 30px var(--genre-color);
+        }
+
+        .knob-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--genre-color);
+            border-radius: 50%;
+        }
+
+        .genre-btn.active .knob-dot {
+            background: white;
+        }
+
+        .genre-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            text-align: center;
+        }
+
+        /* Now Playing */
+        .now-playing {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 24px;
+            margin-bottom: 32px;
+        }
+
+        .now-playing-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            margin-bottom: 16px;
         }
 
-        .control-value {
-            font-family: 'Orbitron', monospace;
-            color: var(--accent-cyan);
+        .now-playing-title {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .now-playing-genre {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .now-playing-info {
             font-size: 14px;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .control-btn {
+            flex: 1;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .control-btn.primary {
+            background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
+            color: white;
+        }
+
+        .control-btn.primary:hover {
+            transform: scale(1.02);
+            box-shadow: 0 8px 30px rgba(147, 51, 234, 0.4);
+        }
+
+        .control-btn.secondary {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .control-btn.secondary:hover {
+            background: var(--border);
+        }
+
+        /* Play Button */
+        .play-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            margin: 0 auto;
+        }
+
+        .play-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 40px rgba(147, 51, 234, 0.5);
+        }
+
+        .play-btn svg {
+            width: 32px;
+            height: 32px;
+            fill: white;
         }
 
         /* Sliders */
-        .slider-container {
-            position: relative;
+        .slider-section {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .slider-group {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+        }
+
+        .slider-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .slider-value {
+            color: var(--accent-cyan);
+            font-family: 'JetBrains Mono', monospace;
         }
 
         input[type="range"] {
-            -webkit-appearance: none;
             width: 100%;
             height: 6px;
-            background: linear-gradient(90deg, var(--accent-purple) 0%, var(--bg-dark) 0%);
+            -webkit-appearance: none;
+            background: var(--bg-dark);
             border-radius: 3px;
             outline: none;
-            cursor: pointer;
         }
 
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
             width: 20px;
             height: 20px;
-            background: var(--text-primary);
+            background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
             border-radius: 50%;
             cursor: pointer;
-            box-shadow: var(--glow-cyan);
-            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 0 10px rgba(147, 51, 234, 0.5);
         }
 
-        input[type="range"]::-webkit-slider-thumb:hover {
-            transform: scale(1.2);
-            box-shadow: var(--glow-magenta);
-        }
-
-        /* Select Dropdown */
-        .select-wrapper {
-            position: relative;
-        }
-
-        select {
-            width: 100%;
-            padding: 14px 20px;
-            background: var(--bg-dark);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 12px;
-            color: var(--text-primary);
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 16px;
-            font-weight: 500;
-            cursor: pointer;
-            appearance: none;
-            outline: none;
-            transition: border-color 0.3s, box-shadow 0.3s;
-        }
-
-        select:focus {
-            border-color: var(--accent-cyan);
-            box-shadow: 0 0 20px rgba(0, 245, 255, 0.2);
-        }
-
-        .select-wrapper::after {
-            content: '▼';
-            position: absolute;
-            right: 16px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--accent-cyan);
-            font-size: 10px;
-            pointer-events: none;
-        }
-
-        /* Toggle Switches */
-        .toggles-row {
-            display: flex;
-            gap: 16px;
-            flex-wrap: wrap;
-        }
-
-        .toggle-btn {
-            flex: 1;
-            min-width: 100px;
-            padding: 14px 20px;
-            background: var(--bg-dark);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 12px;
-            color: var(--text-secondary);
-            font-family: 'Rajdhani', sans-serif;
-            font-size: 13px;
-            font-weight: 600;
-            letter-spacing: 1px;
-            cursor: pointer;
-            transition: all 0.3s;
-            text-transform: uppercase;
-        }
-
-        .toggle-btn.active {
-            background: linear-gradient(135deg, var(--accent-purple), var(--accent-magenta));
-            border-color: transparent;
-            color: white;
-            box-shadow: var(--glow-magenta);
-        }
-
-        .toggle-btn:hover:not(.active) {
-            border-color: var(--accent-cyan);
-        }
-
-        /* Generate Button */
-        .generate-section {
-            display: flex;
-            gap: 16px;
-            align-items: center;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-
-        .generate-btn {
-            padding: 20px 60px;
-            font-family: 'Orbitron', monospace;
-            font-size: 18px;
-            font-weight: 700;
-            letter-spacing: 4px;
-            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
-            border: none;
-            border-radius: 16px;
-            color: var(--bg-dark);
-            cursor: pointer;
-            transition: all 0.3s;
-            box-shadow: 0 10px 40px rgba(0, 245, 255, 0.3);
-        }
-
-        .generate-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 15px 50px rgba(0, 245, 255, 0.4);
-        }
-
-        .generate-btn:active {
-            transform: translateY(0);
-        }
-
-        .generate-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .generate-btn.generating {
-            animation: glow-pulse 1s infinite;
-        }
-
-        @keyframes glow-pulse {
-            0%, 100% { box-shadow: 0 10px 40px rgba(0, 245, 255, 0.3); }
-            50% { box-shadow: 0 10px 60px rgba(255, 0, 170, 0.5); }
-        }
-
-        /* Output Section */
-        .output-section {
-            margin-top: 40px;
-            padding-top: 40px;
-            border-top: 1px solid rgba(255,255,255,0.05);
-        }
-
-        .output-title {
-            font-family: 'Orbitron', monospace;
-            font-size: 12px;
-            color: var(--text-secondary);
-            letter-spacing: 3px;
-            margin-bottom: 20px;
-        }
-
-        .output-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 16px;
-        }
-
-        .output-card {
-            background: var(--bg-control);
-            border-radius: 12px;
-            padding: 20px;
-            border: 1px solid rgba(255,255,255,0.05);
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            transition: all 0.3s;
-            cursor: pointer;
-        }
-
-        .output-card:hover {
-            border-color: var(--accent-cyan);
-            transform: translateY(-2px);
-        }
-
-        .output-icon {
-            width: 48px;
-            height: 48px;
-            background: linear-gradient(135deg, var(--accent-purple), var(--accent-magenta));
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-        }
-
-        .output-info h4 {
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-
-        .output-info p {
-            font-size: 11px;
-            color: var(--text-secondary);
-        }
-
-        /* Visualizer */
-        .visualizer {
-            height: 80px;
-            background: var(--bg-control);
-            border-radius: 12px;
-            margin-top: 24px;
-            display: flex;
-            align-items: flex-end;
-            justify-content: center;
-            gap: 3px;
-            padding: 16px;
-            overflow: hidden;
-        }
-
-        .viz-bar {
-            width: 4px;
-            background: linear-gradient(to top, var(--accent-cyan), var(--accent-magenta));
-            border-radius: 2px;
-            transition: height 0.1s;
-        }
-
-        /* Spectacles Badge */
-        .spectacles-badge {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
+        /* Audio Player */
+        .audio-section {
             background: var(--bg-card);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 12px;
-            padding: 12px 20px;
-            display: flex;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+        }
+
+        audio {
+            width: 100%;
+            height: 40px;
+            border-radius: 8px;
+        }
+
+        /* Loading */
+        .loading {
+            display: none;
             align-items: center;
-            gap: 10px;
-            font-size: 12px;
+            justify-content: center;
+            gap: 12px;
+            padding: 20px;
             color: var(--text-secondary);
         }
 
-        .spectacles-badge svg {
+        .loading.active {
+            display: flex;
+        }
+
+        .spinner {
             width: 24px;
             height: 24px;
-        }
-
-        /* Loading Spinner */
-        .spinner {
-            width: 20px;
-            height: 20px;
-            border: 2px solid transparent;
-            border-top-color: var(--bg-dark);
+            border: 3px solid var(--border);
+            border-top-color: var(--accent-purple);
             border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            display: inline-block;
-            margin-right: 10px;
+            animation: spin 1s linear infinite;
         }
 
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
 
-        /* Responsive */
-        @media (max-width: 768px) {
-            .header {
-                padding: 16px 20px;
-            }
-            .logo {
-                font-size: 22px;
-            }
-            .dj-deck {
-                padding: 24px;
-            }
-            .generate-btn {
-                width: 100%;
-                padding: 18px 40px;
-            }
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .footer a {
+            color: var(--accent-purple);
+            text-decoration: none;
         }
     </style>
 </head>
 <body>
     <header class="header">
-        <div>
-            <div class="logo">PROMPTDJ</div>
-            <div class="logo-sub">AI MIDI GENERATOR</div>
+        <div class="logo">
+            <div class="logo-icon">🎵</div>
+            <span>PromptDJ</span>
         </div>
         <div class="status-badge">
-            <span class="status-dot"></span>
-            <span>SERVICE ONLINE</span>
+            <div class="status-dot"></div>
+            <span id="status">Ready</span>
         </div>
     </header>
 
     <main class="main">
-        <div class="dj-deck">
-            <div class="deck-header">
-                <span class="deck-title">◆ GENERATION CONTROLS</span>
+        <p class="section-title">Select Genre</p>
+        
+        <div class="genre-grid" id="genreGrid">
+            <!-- Genres will be inserted here -->
+        </div>
+
+        <div class="now-playing" id="nowPlaying">
+            <div class="now-playing-header">
+                <span class="now-playing-title">Now Playing</span>
             </div>
-
-            <div class="controls-grid">
-                <!-- Tempo -->
-                <div class="control-group">
-                    <div class="control-label">
-                        <span>TEMPO</span>
-                        <span class="control-value" id="tempo-value">120 BPM</span>
-                    </div>
-                    <div class="slider-container">
-                        <input type="range" id="tempo" min="60" max="180" value="120">
-                    </div>
-                </div>
-
-                <!-- Bars -->
-                <div class="control-group">
-                    <div class="control-label">
-                        <span>BARS</span>
-                        <span class="control-value" id="bars-value">8</span>
-                    </div>
-                    <div class="slider-container">
-                        <input type="range" id="bars" min="2" max="32" value="8">
-                    </div>
-                </div>
-
-                <!-- Density -->
-                <div class="control-group">
-                    <div class="control-label">
-                        <span>DENSITY</span>
-                        <span class="control-value" id="density-value">55%</span>
-                    </div>
-                    <div class="slider-container">
-                        <input type="range" id="density" min="10" max="100" value="55">
-                    </div>
-                </div>
-
-                <!-- Variation -->
-                <div class="control-group">
-                    <div class="control-label">
-                        <span>VARIATION</span>
-                        <span class="control-value" id="variation-value">35%</span>
-                    </div>
-                    <div class="slider-container">
-                        <input type="range" id="variation" min="0" max="100" value="35">
-                    </div>
-                </div>
-
-                <!-- Scale -->
-                <div class="control-group">
-                    <div class="control-label">
-                        <span>SCALE</span>
-                    </div>
-                    <div class="select-wrapper">
-                        <select id="scale">
-                            <option value="C_major">C Major</option>
-                            <option value="C_minor">C Minor</option>
-                            <option value="D_major">D Major</option>
-                            <option value="D_minor">D Minor</option>
-                            <option value="E_minor">E Minor</option>
-                            <option value="F_major">F Major</option>
-                            <option value="G_major">G Major</option>
-                            <option value="A_minor">A Minor</option>
-                            <option value="A_major">A Major</option>
-                            <option value="B_minor">B Minor</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Drum Style -->
-                <div class="control-group">
-                    <div class="control-label">
-                        <span>DRUM STYLE</span>
-                    </div>
-                    <div class="select-wrapper">
-                        <select id="drumStyle">
-                            <option value="basic">Basic</option>
-                            <option value="funk">Funk</option>
-                            <option value="jazz">Jazz</option>
-                            <option value="electronic">Electronic</option>
-                            <option value="techno">Techno</option>
-                        </select>
-                    </div>
-                </div>
+            <div class="now-playing-genre" id="currentGenre">Select a genre</div>
+            <div class="now-playing-info" id="currentInfo">Tap a button to generate music</div>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <span>Generating...</span>
             </div>
-
-            <!-- Generation Mode Toggles -->
-            <div class="control-group" style="margin-bottom: 40px;">
-                <div class="control-label">
-                    <span>GENERATION MODE</span>
-                </div>
-                <div class="toggles-row">
-                    <button class="toggle-btn active" data-mode="melody" onclick="setMode('melody')">
-                        🎹 Melody
-                    </button>
-                    <button class="toggle-btn" data-mode="drums" onclick="setMode('drums')">
-                        🥁 Drums
-                    </button>
-                    <button class="toggle-btn" data-mode="both" onclick="setMode('both')">
-                        🎵 Both
-                    </button>
-                </div>
+            
+            <div class="controls">
+                <button class="control-btn secondary" onclick="randomGenre()">🎲 Random</button>
+                <button class="control-btn primary" onclick="regenerate()">⟳ Regenerate</button>
+                <button class="control-btn secondary" onclick="stopAudio()">⏹ Stop</button>
             </div>
+        </div>
 
-            <!-- Swing Toggle -->
-            <div class="control-group" style="margin-bottom: 40px;">
-                <div class="control-label">
-                    <span>SWING</span>
-                    <span class="control-value" id="swing-value">0%</span>
+        <p class="section-title">Parameters</p>
+        
+        <div class="slider-section">
+            <div class="slider-group">
+                <div class="slider-label">
+                    <span>Tempo</span>
+                    <span class="slider-value" id="tempoValue">120 BPM</span>
                 </div>
-                <div class="slider-container">
-                    <input type="range" id="swing" min="0" max="50" value="0">
+                <input type="range" id="tempo" min="60" max="180" value="120" oninput="updateTempo(this.value)">
+            </div>
+            <div class="slider-group">
+                <div class="slider-label">
+                    <span>Density</span>
+                    <span class="slider-value" id="densityValue">60%</span>
                 </div>
+                <input type="range" id="density" min="0" max="100" value="60" oninput="updateDensity(this.value)">
             </div>
-
-            <!-- Generate Button -->
-            <div class="generate-section">
-                <button class="generate-btn" id="generateBtn" onclick="generate()">
-                    GENERATE
-                </button>
-            </div>
-
-            <!-- Visualizer -->
-            <div class="visualizer" id="visualizer">
-                <!-- Bars will be added by JS -->
-            </div>
-
-            <!-- Output Section -->
-            <div class="output-section" id="outputSection" style="display: none;">
-                <div class="output-title">◆ GENERATED MIDI</div>
-                <div class="output-grid" id="outputGrid">
-                    <!-- Output cards will be added here -->
+            <div class="slider-group">
+                <div class="slider-label">
+                    <span>Variation</span>
+                    <span class="slider-value" id="variationValue">40%</span>
                 </div>
+                <input type="range" id="variation" min="0" max="100" value="40" oninput="updateVariation(this.value)">
             </div>
+            <div class="slider-group">
+                <div class="slider-label">
+                    <span>Bars</span>
+                    <span class="slider-value" id="barsValue">8</span>
+                </div>
+                <input type="range" id="bars" min="2" max="32" value="8" oninput="updateBars(this.value)">
+            </div>
+        </div>
+
+        <p class="section-title">Audio Output</p>
+        
+        <div class="audio-section">
+            <audio id="audioPlayer" controls></audio>
         </div>
     </main>
 
-    <!-- Spectacles Badge -->
-    <div class="spectacles-badge">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
-            <circle cx="12" cy="12" r="3"/>
-        </svg>
-        <span>SPECTACLES READY</span>
-    </div>
+    <footer class="footer">
+        <p>PromptDJ • AI Music Generator for <a href="https://developers.snap.com/spectacles" target="_blank">Snap Spectacles</a></p>
+        <p style="margin-top: 8px;">Built with FluidSynth + FastAPI</p>
+    </footer>
 
     <script>
-        // State
-        let currentMode = 'melody';
-        let generatedFiles = [];
+        const GENRES = [
+            { id: "techno", name: "Techno", color: "#9333ea", tempo: 128, scale: "C_minor" },
+            { id: "house", name: "House", color: "#3b82f6", tempo: 124, scale: "F_major" },
+            { id: "dubstep", name: "Dubstep", color: "#eab308", tempo: 140, scale: "D_minor" },
+            { id: "dnb", name: "D&B", color: "#f97316", tempo: 174, scale: "A_minor" },
+            { id: "funk", name: "Funk", color: "#f97316", tempo: 110, scale: "E_minor" },
+            { id: "jazz", name: "Jazz", color: "#6366f1", tempo: 120, scale: "G_major" },
+            { id: "hiphop", name: "Hip Hop", color: "#a855f7", tempo: 90, scale: "C_minor" },
+            { id: "trap", name: "Trap", color: "#ef4444", tempo: 140, scale: "A_minor" },
+            { id: "latin", name: "Latin", color: "#22c55e", tempo: 105, scale: "D_major" },
+            { id: "reggae", name: "Reggae", color: "#10b981", tempo: 80, scale: "G_major" },
+            { id: "electronic", name: "Electronic", color: "#06b6d4", tempo: 128, scale: "C_major" },
+            { id: "basic", name: "Basic", color: "#71717a", tempo: 100, scale: "C_major" }
+        ];
 
-        // Initialize visualizer
-        function initVisualizer() {
-            const viz = document.getElementById('visualizer');
-            viz.innerHTML = '';
-            for (let i = 0; i < 64; i++) {
-                const bar = document.createElement('div');
-                bar.className = 'viz-bar';
-                bar.style.height = '4px';
-                viz.appendChild(bar);
-            }
-        }
+        let currentGenre = null;
+        let params = {
+            tempo_bpm: 120,
+            density: 0.6,
+            variation: 0.4,
+            bars: 8,
+            scale: "C_major",
+            drum_style: "techno"
+        };
 
-        // Animate visualizer
-        function animateVisualizer(active = false) {
-            const bars = document.querySelectorAll('.viz-bar');
-            bars.forEach((bar, i) => {
-                if (active) {
-                    const height = Math.random() * 50 + 10;
-                    bar.style.height = height + 'px';
-                } else {
-                    bar.style.height = '4px';
-                }
-            });
-        }
-
-        let vizInterval;
-        function startVisualizerAnimation() {
-            vizInterval = setInterval(() => animateVisualizer(true), 100);
-        }
-
-        function stopVisualizerAnimation() {
-            clearInterval(vizInterval);
-            animateVisualizer(false);
-        }
-
-        // Update slider backgrounds
-        function updateSliderBackground(slider) {
-            const value = (slider.value - slider.min) / (slider.max - slider.min) * 100;
-            slider.style.background = `linear-gradient(90deg, #8b5cf6 ${value}%, #0a0a0f ${value}%)`;
-        }
-
-        // Initialize sliders
-        document.querySelectorAll('input[type="range"]').forEach(slider => {
-            updateSliderBackground(slider);
-            slider.addEventListener('input', () => {
-                updateSliderBackground(slider);
-                updateValueDisplay(slider);
-            });
+        // Create genre grid
+        const grid = document.getElementById('genreGrid');
+        GENRES.forEach(genre => {
+            const btn = document.createElement('button');
+            btn.className = 'genre-btn';
+            btn.id = `btn-${genre.id}`;
+            btn.style.setProperty('--genre-color', genre.color);
+            btn.innerHTML = `
+                <div class="genre-knob">
+                    <div class="knob-dot"></div>
+                </div>
+                <span class="genre-name">${genre.name}</span>
+            `;
+            btn.onclick = () => selectGenre(genre);
+            grid.appendChild(btn);
         });
 
-        function updateValueDisplay(slider) {
-            const id = slider.id;
-            const value = slider.value;
-            const display = document.getElementById(id + '-value');
-            if (display) {
-                if (id === 'tempo') display.textContent = value + ' BPM';
-                else if (id === 'bars') display.textContent = value;
-                else if (id === 'density' || id === 'variation' || id === 'swing') display.textContent = value + '%';
-            }
-        }
-
-        // Set generation mode
-        function setMode(mode) {
-            currentMode = mode;
-            document.querySelectorAll('.toggle-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.mode === mode);
-            });
-        }
-
-        // Generate MIDI
-        async function generate() {
-            const btn = document.getElementById('generateBtn');
-            btn.disabled = true;
-            btn.classList.add('generating');
-            btn.innerHTML = '<span class="spinner"></span>GENERATING...';
-            startVisualizerAnimation();
-
-            const tempo = parseInt(document.getElementById('tempo').value);
-            const bars = parseInt(document.getElementById('bars').value);
-            const density = parseInt(document.getElementById('density').value) / 100;
-            const variation = parseInt(document.getElementById('variation').value) / 100;
-            const scale = document.getElementById('scale').value;
-            const drumStyle = document.getElementById('drumStyle').value;
-            const swing = parseInt(document.getElementById('swing').value) / 100;
-
-            generatedFiles = [];
-
-            try {
-                if (currentMode === 'melody' || currentMode === 'both') {
-                    const melodyResponse = await fetch('/generate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            tempo_bpm: tempo,
-                            bars: bars,
-                            density: density,
-                            variation: variation,
-                            scale: scale
-                        })
-                    });
-                    
-                    if (melodyResponse.ok) {
-                        const blob = await melodyResponse.blob();
-                        const url = URL.createObjectURL(blob);
-                        generatedFiles.push({
-                            name: `melody_${scale}_${tempo}bpm.mid`,
-                            url: url,
-                            type: 'melody'
-                        });
-                    }
-                }
-
-                if (currentMode === 'drums' || currentMode === 'both') {
-                    const drumsResponse = await fetch('/drums', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            tempo_bpm: tempo,
-                            bars: bars,
-                            style: drumStyle,
-                            swing: swing
-                        })
-                    });
-
-                    if (drumsResponse.ok) {
-                        const blob = await drumsResponse.blob();
-                        const url = URL.createObjectURL(blob);
-                        generatedFiles.push({
-                            name: `drums_${drumStyle}_${tempo}bpm.mid`,
-                            url: url,
-                            type: 'drums'
-                        });
-                    }
-                }
-
-                displayOutput();
-            } catch (error) {
-                console.error('Generation failed:', error);
-                alert('Generation failed. Is the server running?');
-            }
-
-            btn.disabled = false;
-            btn.classList.remove('generating');
-            btn.innerHTML = 'GENERATE';
-            stopVisualizerAnimation();
-        }
-
-        // Display generated files
-        function displayOutput() {
-            const section = document.getElementById('outputSection');
-            const grid = document.getElementById('outputGrid');
+        function selectGenre(genre) {
+            // Update UI
+            document.querySelectorAll('.genre-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${genre.id}`).classList.add('active');
             
-            if (generatedFiles.length === 0) {
-                section.style.display = 'none';
-                return;
+            currentGenre = genre;
+            params.drum_style = genre.id;
+            params.scale = genre.scale;
+            params.tempo_bpm = genre.tempo;
+            
+            document.getElementById('tempo').value = genre.tempo;
+            document.getElementById('tempoValue').textContent = `${genre.tempo} BPM`;
+            
+            document.getElementById('currentGenre').textContent = genre.name;
+            document.getElementById('currentInfo').textContent = `${genre.tempo} BPM • ${genre.scale.replace('_', ' ')}`;
+            
+            generate();
+        }
+
+        async function generate() {
+            setStatus('Generating...');
+            document.getElementById('loading').classList.add('active');
+            
+            try {
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tempo_bpm: params.tempo_bpm,
+                        bars: params.bars,
+                        scale: params.scale,
+                        density: params.density,
+                        variation: params.variation
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Generation failed');
+                
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                
+                const audio = document.getElementById('audioPlayer');
+                audio.src = url;
+                audio.play();
+                
+                setStatus('Playing');
+                document.getElementById('currentInfo').textContent = 
+                    `${params.tempo_bpm} BPM • ${params.scale.replace('_', ' ')} • ${params.bars} bars`;
+                    
+            } catch (error) {
+                console.error(error);
+                setStatus('Error');
             }
-
-            section.style.display = 'block';
-            grid.innerHTML = '';
-
-            generatedFiles.forEach(file => {
-                const card = document.createElement('div');
-                card.className = 'output-card';
-                card.onclick = () => downloadFile(file);
-                card.innerHTML = `
-                    <div class="output-icon">${file.type === 'melody' ? '🎹' : '🥁'}</div>
-                    <div class="output-info">
-                        <h4>${file.type === 'melody' ? 'Melody' : 'Drums'}</h4>
-                        <p>Click to download</p>
-                    </div>
-                `;
-                grid.appendChild(card);
-            });
+            
+            document.getElementById('loading').classList.remove('active');
         }
 
-        // Download file
-        function downloadFile(file) {
-            const a = document.createElement('a');
-            a.href = file.url;
-            a.download = file.name;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+        function regenerate() {
+            if (currentGenre) {
+                generate();
+            } else {
+                randomGenre();
+            }
         }
 
-        // Initialize
-        initVisualizer();
+        function randomGenre() {
+            const genre = GENRES[Math.floor(Math.random() * GENRES.length)];
+            selectGenre(genre);
+        }
+
+        function stopAudio() {
+            const audio = document.getElementById('audioPlayer');
+            audio.pause();
+            audio.currentTime = 0;
+            setStatus('Stopped');
+        }
+
+        function setStatus(text) {
+            document.getElementById('status').textContent = text;
+        }
+
+        function updateTempo(value) {
+            params.tempo_bpm = parseInt(value);
+            document.getElementById('tempoValue').textContent = `${value} BPM`;
+        }
+
+        function updateDensity(value) {
+            params.density = value / 100;
+            document.getElementById('densityValue').textContent = `${value}%`;
+        }
+
+        function updateVariation(value) {
+            params.variation = value / 100;
+            document.getElementById('variationValue').textContent = `${value}%`;
+        }
+
+        function updateBars(value) {
+            params.bars = parseInt(value);
+            document.getElementById('barsValue').textContent = value;
+        }
     </script>
 </body>
 </html>
-
