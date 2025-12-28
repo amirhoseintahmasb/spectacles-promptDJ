@@ -1,0 +1,18 @@
+# Music AI Service - Dependencies
+# ================================
+
+# Web Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+
+# Data Validation
+pydantic>=2.5.0
+
+# MIDI Processing
+mido>=1.3.0
+
+# Note: note-seq is optional (for future Magenta integration)
+# Uncomment if you want to add Magenta model support later:
+# note-seq>=0.0.5
+
