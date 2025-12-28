@@ -44,8 +44,11 @@ OUT_DIR.mkdir(exist_ok=True)
 # SoundFont path for FluidSynth
 SF2_PATH = SF2_DIR / "MuseScore_General.sf2"
 
-# Server URL - use localhost for local testing
-HOST_URL = "http://127.0.0.1:8123"
+# Server URL - use network IP for Spectacles, localhost for local testing
+# Set HOST_IP environment variable to override (e.g., export HOST_IP=172.20.10.3)
+import os
+HOST_IP = os.getenv("HOST_IP", "172.20.10.3")  # Default to network IP for Spectacles
+HOST_URL = f"http://{HOST_IP}:8123"
 
 # Mount static files
 if STATIC_DIR.exists():

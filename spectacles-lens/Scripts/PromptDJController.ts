@@ -62,7 +62,7 @@ export class PromptDJController extends BaseScriptComponent {
     
     @input
     @hint("WebSocket backend URL (ws://IP:8123/ws/spectacles/)")
-    backendUrl: string = "ws://127.0.0.1:8123/ws/spectacles/"
+    backendUrl: string = "ws://172.20.10.3:8123/ws/spectacles/"  // Change to your Mac's IP address
     
     @input
     @hint("Audio component for playback")
