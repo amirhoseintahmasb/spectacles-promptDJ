@@ -27,15 +27,28 @@ cd ~/music-ai-service
 ./start.sh
 ```
 
-### 2. Find Your Mac's IP Address
+### 2. Configure IP Address
 
-```bash
-ipconfig getifaddr en0
-```
+**For Lens Studio Preview (local testing):**
+- Default is `127.0.0.1` ✅ (already configured)
+- No changes needed!
 
-If it's different from `172.20.10.3`, update the IP in:
-- `spectacles-lens/Scripts/PromptDJController.ts` (line 65)
-- `spectacles-lens/Scripts/PromptDJController.js` (line 18)
+**For Real Spectacles Glasses:**
+1. Find your Mac's IP:
+   ```bash
+   ipconfig getifaddr en0
+   ```
+
+2. Update in Lens Studio:
+   - Select `PromptDJ_Manager` SceneObject
+   - In Inspector, change `backendUrl` to: `ws://YOUR_IP:8123/ws/spectacles/`
+   - Example: `ws://172.20.10.3:8123/ws/spectacles/`
+
+3. Or set environment variable when starting server:
+   ```bash
+   export HOST_IP=172.20.10.3
+   uvicorn app:app --host 0.0.0.0 --port 8123 --reload
+   ```
 
 ---
 
@@ -69,22 +82,27 @@ If it's different from `172.20.10.3`, update the IP in:
 
 ## 🔧 Configuration
 
-### Update Backend URL
+### Default Settings
 
-If your Mac's IP changes, update it in Lens Studio:
+- **Lens Studio Preview**: Uses `127.0.0.1` (localhost) ✅
+- **Real Spectacles**: Need network IP (e.g., `172.20.10.3`)
+
+### Update Backend URL for Real Spectacles
 
 1. Select `PromptDJ_Manager` SceneObject
 2. In Inspector, find `PromptDJController` script
-3. Change `backendUrl` to: `ws://YOUR_IP:8123/ws/spectacles/`
+3. Change `backendUrl` from `ws://127.0.0.1:8123/ws/spectacles/` to `ws://YOUR_IP:8123/ws/spectacles/`
 
 ### Or Set via Environment Variable
 
 ```bash
-export HOST_IP=172.20.10.3
+export HOST_IP=172.20.10.3  # Your Mac's network IP
 cd ~/music-ai-service
 source .venv/bin/activate
 uvicorn app:app --host 0.0.0.0 --port 8123 --reload
 ```
+
+**Note**: Server always binds to `0.0.0.0` to accept connections from both localhost and network.
 
 ---
 
