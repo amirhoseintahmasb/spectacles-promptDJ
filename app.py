@@ -329,12 +329,24 @@ def generate_drums_midi(req: DrumifyRequest) -> str:
     # Sort by time and write to track
     events.sort(key=lambda x: x[0])
     
-    last_tick = 0
+    # Build list of all MIDI messages with absolute times
+    midi_events = []
     for tick, note, vel in events:
-        delta = tick - last_tick
-        track.append(Message("note_on", note=note, velocity=vel, time=delta, channel=9))
-        track.append(Message("note_off", note=note, velocity=0, time=60, channel=9))
-        last_tick = tick + 60
+        midi_events.append((tick, "on", note, vel))
+        midi_events.append((tick + 60, "off", note, 0))  # Short drum hit
+    
+    # Sort all events by absolute time
+    midi_events.sort(key=lambda x: x[0])
+    
+    # Convert to delta times
+    last_tick = 0
+    for abs_tick, event_type, note, vel in midi_events:
+        delta = max(0, abs_tick - last_tick)  # Ensure non-negative delta
+        if event_type == "on":
+            track.append(Message("note_on", note=note, velocity=vel, time=delta, channel=9))
+        else:
+            track.append(Message("note_off", note=note, velocity=0, time=delta, channel=9))
+        last_tick = abs_tick
 
     track.append(MetaMessage("end_of_track", time=0))
 
