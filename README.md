@@ -115,4 +115,4 @@ MIT License - see [LICENSE](LICENSE)
 
 ---
 
-*Built for Snap Spectacles 2024* 🕶️
+*Built for Snap Spectacles 2025* 🕶️
