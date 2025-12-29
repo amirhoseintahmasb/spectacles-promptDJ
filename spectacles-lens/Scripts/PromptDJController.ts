@@ -130,21 +130,8 @@ interface LensWebSocket {
     close: () => void
 }
 
-/** Internet Module interface */
-interface InternetModule {
-    createWebSocket: (url: string) => LensWebSocket
-    makeResourceFromUrl: (url: string) => any
-    fetch: (url: string) => Promise<Response>
-}
-
-/** Remote Media Module interface */
-interface RemoteMediaModule {
-    loadResourceAsAudioTrackAsset: (
-        resource: any,
-        onSuccess: (audioTrack: AudioTrackAsset) => void,
-        onError: (error: string) => void
-    ) => void
-}
+// InternetModule and RemoteMediaModule are built-in Lens Studio asset types
+// They are declared globally by Lens Studio's TypeScript definitions
 
 /** Delayed Callback Event interface */
 interface DelayedCallbackEvent {
@@ -165,13 +152,13 @@ export class PromptDJController extends BaseScriptComponent {
     // INPUTS
     // ========================================
     
-    @input
+    @input("Asset.InternetModule")
     @hint("Internet Module for WebSocket connection")
-    internetModule!: InternetModule
+    internetModule!: any
     
-    @input
+    @input("Asset.RemoteMediaModule")
     @hint("Remote Media Module for audio loading")
-    remoteMediaModule!: RemoteMediaModule
+    remoteMediaModule!: any
     
     @input
     @hint("WebSocket backend URL (ws://IP:8123/ws/spectacles/) - Use 127.0.0.1 for Lens Studio Preview, network IP for real Spectacles")
