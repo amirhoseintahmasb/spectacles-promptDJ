@@ -5,6 +5,12 @@
  * Connects to PromptDJ backend via WebSocket and plays generated audio.
  * 
  * Based on Spectacles Interaction Kit patterns from RocketLaunchControl.
+ * 
+ * AUDIO PLAYBACK NOTES (from Snap documentation):
+ * - Spectacles support max 16 concurrent audio tracks
+ * - Use MP3 format, mono channel for best compatibility
+ * - Set playbackMode to LowLatency for immediate response
+ * - Keep audio under 15 seconds for optimal performance
  */
 
 import {Interactable} from "SpectaclesInteractionKit.lspkg/Components/Interaction/Interactable/Interactable"
@@ -12,19 +18,37 @@ import NativeLogger from "SpectaclesInteractionKit.lspkg/Utils/NativeLogger"
 import {validate} from "SpectaclesInteractionKit.lspkg/Utils/validate"
 import Event from "SpectaclesInteractionKit.lspkg/Utils/Event"
 
-declare const HapticFeedbackType: { Success: any };
+// Declare global types for Lens Studio
+declare const HapticFeedbackType: { Success: any }
+declare const Audio: {
+    PlaybackMode: {
+        LowLatency: number
+        LowPower: number
+    }
+}
+declare const global: {
+    promptDJController?: PromptDJController
+    HapticFeedbackSystem?: {
+        hapticFeedback: (type: any) => void
+    }
+}
 
 const TAG = "PromptDJ"
 const log = new NativeLogger(TAG)
 
-// WebSocket message types
+// ========================================
+// TYPE DEFINITIONS
+// ========================================
+
+/** WebSocket connected message */
 interface ConnectedMessage {
     type: "connected"
-    state?: MusicParams
+    state?: Partial<MusicParams>
     available_scales?: string[]
     available_drum_styles?: string[]
 }
 
+/** Audio ready message */
 interface AudioReadyMessage {
     type: "audio_ready"
     url: string
@@ -34,7 +58,39 @@ interface AudioReadyMessage {
     drums?: { url: string; size_bytes: number }
 }
 
-interface MusicParams {
+/** Status message */
+interface StatusMessage {
+    type: "status"
+    message: string
+}
+
+/** Error message */
+interface ErrorMessage {
+    type: "error"
+    message: string
+}
+
+/** Params updated message */
+interface ParamsUpdatedMessage {
+    type: "params_updated"
+}
+
+/** Pong message */
+interface PongMessage {
+    type: "pong"
+}
+
+/** Union type for all WebSocket messages */
+type WebSocketMessage = 
+    | ConnectedMessage 
+    | AudioReadyMessage 
+    | StatusMessage 
+    | ErrorMessage 
+    | ParamsUpdatedMessage 
+    | PongMessage
+
+/** Music generation parameters */
+export interface MusicParams {
     tempo_bpm: number
     scale: string
     density: number
@@ -42,6 +98,63 @@ interface MusicParams {
     drum_style: string
     swing: number
     bars: number
+}
+
+/** WebSocket event types */
+interface WebSocketOpenEvent {
+    type: string
+}
+
+interface WebSocketMessageEvent {
+    data: Blob | string
+}
+
+interface WebSocketCloseEvent {
+    wasClean: boolean
+    code: number
+    reason: string
+}
+
+interface WebSocketErrorEvent {
+    type: string
+}
+
+/** WebSocket interface for Lens Studio */
+interface LensWebSocket {
+    binaryType: string
+    onopen: ((event: WebSocketOpenEvent) => void) | null
+    onmessage: ((event: WebSocketMessageEvent) => void) | null
+    onclose: ((event: WebSocketCloseEvent) => void) | null
+    onerror: ((event: WebSocketErrorEvent) => void) | null
+    send: (data: string) => void
+    close: () => void
+}
+
+/** Internet Module interface */
+interface InternetModule {
+    createWebSocket: (url: string) => LensWebSocket
+    makeResourceFromUrl: (url: string) => any
+    fetch: (url: string) => Promise<Response>
+}
+
+/** Remote Media Module interface */
+interface RemoteMediaModule {
+    loadResourceAsAudioTrackAsset: (
+        resource: any,
+        onSuccess: (audioTrack: AudioTrackAsset) => void,
+        onError: (error: string) => void
+    ) => void
+}
+
+/** Delayed Callback Event interface */
+interface DelayedCallbackEvent {
+    bind: (callback: () => void) => void
+    reset: (delay: number) => void
+}
+
+/** Extended AudioComponent with playbackMode */
+interface ExtendedAudioComponent extends AudioComponent {
+    playbackMode?: number
 }
 
 /**
@@ -64,12 +177,16 @@ export class PromptDJController extends BaseScriptComponent {
     
     @input
     @hint("WebSocket backend URL (ws://IP:8123/ws/spectacles/) - Use 127.0.0.1 for Lens Studio Preview, network IP for real Spectacles")
-    backendUrl: string = "ws://127.0.0.1:8123/ws/spectacles/"  // Use 127.0.0.1 for local testing, network IP (e.g., 172.20.10.3) for real Spectacles
+    backendUrl: string = "ws://127.0.0.1:8123/ws/spectacles/"
     
     @input
     @hint("Audio component for playback")
     @allowUndefined
     audioPlayer: AudioComponent | undefined
+    
+    @input
+    @hint("Use Low Latency audio mode (recommended for button feedback)")
+    useLowLatencyAudio: boolean = true
     
     @input
     @hint("Status text display")
@@ -134,11 +251,12 @@ export class PromptDJController extends BaseScriptComponent {
     // STATE
     // ========================================
     
-    private socket: WebSocket | null = null
+    private socket: LensWebSocket | null = null
     private isConnected: boolean = false
     private clientId: string = "spectacles-" + Math.random().toString(36).substring(2, 11)
     
-    private params: MusicParams = {
+    /** Current music parameters - exposed for external access */
+    public params: MusicParams = {
         tempo_bpm: 120,
         scale: "C_major",
         density: 0.55,
@@ -155,11 +273,14 @@ export class PromptDJController extends BaseScriptComponent {
     
     private currentAudioUrl: string | null = null
     private isPlaying: boolean = false
+    private audioLoadAttempts: number = 0
+    private readonly MAX_AUDIO_LOAD_ATTEMPTS: number = 3
     
     // Delayed events
     private connectDelayEvent: DelayedCallbackEvent | null = null
     private reconnectDelayEvent: DelayedCallbackEvent | null = null
     private autoTestDelayEvent: DelayedCallbackEvent | null = null
+    private audioRetryDelayEvent: DelayedCallbackEvent | null = null
     
     // ========================================
     // EVENTS
@@ -174,6 +295,12 @@ export class PromptDJController extends BaseScriptComponent {
     private onAudioReadyEvent = new Event<string>()
     public readonly onAudioReady = this.onAudioReadyEvent.publicApi()
     
+    private onAudioPlayingEvent = new Event()
+    public readonly onAudioPlaying = this.onAudioPlayingEvent.publicApi()
+    
+    private onAudioErrorEvent = new Event<string>()
+    public readonly onAudioError = this.onAudioErrorEvent.publicApi()
+    
     private onParamsChangedEvent = new Event<MusicParams>()
     public readonly onParamsChanged = this.onParamsChangedEvent.publicApi()
     
@@ -185,21 +312,32 @@ export class PromptDJController extends BaseScriptComponent {
         log.i("Initializing...")
         this.updateStatusText("Initializing...")
         
+        // Register globally for access from other scripts
+        this.registerGlobal()
+        
         // Create delayed events
-        this.connectDelayEvent = this.createEvent("DelayedCallbackEvent")
+        this.connectDelayEvent = this.createEvent("DelayedCallbackEvent") as DelayedCallbackEvent
         this.connectDelayEvent.bind(() => this.connect())
         
-        this.reconnectDelayEvent = this.createEvent("DelayedCallbackEvent")
+        this.reconnectDelayEvent = this.createEvent("DelayedCallbackEvent") as DelayedCallbackEvent
         this.reconnectDelayEvent.bind(() => {
             if (!this.isConnected) {
                 this.connect()
             }
         })
         
-        this.autoTestDelayEvent = this.createEvent("DelayedCallbackEvent")
+        this.autoTestDelayEvent = this.createEvent("DelayedCallbackEvent") as DelayedCallbackEvent
         this.autoTestDelayEvent.bind(() => {
             log.i("Auto-generating test melody...")
             this.generateMelody()
+        })
+        
+        this.audioRetryDelayEvent = this.createEvent("DelayedCallbackEvent") as DelayedCallbackEvent
+        this.audioRetryDelayEvent.bind(() => {
+            if (this.currentAudioUrl && this.audioLoadAttempts < this.MAX_AUDIO_LOAD_ATTEMPTS) {
+                log.i("Retrying audio load (attempt " + (this.audioLoadAttempts + 1) + ")...")
+                this.loadAndPlayAudio(this.currentAudioUrl)
+            }
         })
         
         // Setup on start
@@ -208,13 +346,64 @@ export class PromptDJController extends BaseScriptComponent {
         })
     }
     
+    /**
+     * Register this controller globally so other scripts can access it.
+     * This fixes the "cannot set property 'generateMelody' of undefined" error.
+     */
+    private registerGlobal(): void {
+        // Register on global for legacy script access
+        global.promptDJController = this
+        log.i("Registered globally as global.promptDJController")
+    }
+    
     private onStart(): void {
+        // Configure audio player for Spectacles
+        this.configureAudioPlayer()
+        
         // Setup button callbacks
         this.setupButtonCallbacks()
         
         // Connect after delay
         validate(this.connectDelayEvent)
-        this.connectDelayEvent.reset(1.0)
+        this.connectDelayEvent!.reset(1.0)
+    }
+    
+    /**
+     * Configure the AudioComponent for optimal Spectacles playback.
+     * 
+     * KEY FINDINGS FROM RESEARCH:
+     * 1. Spectacles default to Low Power mode which has latency
+     * 2. Set playbackMode to LowLatency for immediate response
+     * 3. Max 16 concurrent audio tracks supported
+     */
+    private configureAudioPlayer(): void {
+        if (!this.audioPlayer) {
+            log.w("No AudioComponent connected - audio will not play!")
+            log.w("Please add an AudioComponent to the scene and connect it.")
+            return
+        }
+        
+        // Cast to extended interface to access playbackMode
+        const extendedAudio = this.audioPlayer as ExtendedAudioComponent
+        
+        // Set Low Latency mode for immediate playback (Spectacles specific)
+        if (this.useLowLatencyAudio) {
+            try {
+                if (typeof Audio !== 'undefined' && Audio.PlaybackMode) {
+                    extendedAudio.playbackMode = Audio.PlaybackMode.LowLatency
+                    log.i("Audio playback mode set to LowLatency")
+                } else {
+                    log.d("Audio.PlaybackMode not available - using default mode")
+                }
+            } catch (e) {
+                log.w("Could not set LowLatency mode: " + e)
+            }
+        }
+        
+        // Log audio configuration
+        log.i("AudioComponent configured:")
+        log.i("  - Volume: " + (this.audioPlayer.volume || "default"))
+        log.i("  - Low Latency: " + this.useLowLatencyAudio)
     }
     
     // ========================================
@@ -226,7 +415,7 @@ export class PromptDJController extends BaseScriptComponent {
         
         // Generate Melody button
         if (this.generateMelodyButton) {
-            const interactable = this.generateMelodyButton.getComponent(interactableTypeName) as Interactable
+            const interactable = this.generateMelodyButton.getComponent(interactableTypeName) as Interactable | null
             if (interactable) {
                 interactable.onTriggerEnd.add(() => this.generateMelody())
             }
@@ -234,7 +423,7 @@ export class PromptDJController extends BaseScriptComponent {
         
         // Generate Drums button
         if (this.generateDrumsButton) {
-            const interactable = this.generateDrumsButton.getComponent(interactableTypeName) as Interactable
+            const interactable = this.generateDrumsButton.getComponent(interactableTypeName) as Interactable | null
             if (interactable) {
                 interactable.onTriggerEnd.add(() => this.generateDrums())
             }
@@ -242,7 +431,7 @@ export class PromptDJController extends BaseScriptComponent {
         
         // Generate Both button
         if (this.generateBothButton) {
-            const interactable = this.generateBothButton.getComponent(interactableTypeName) as Interactable
+            const interactable = this.generateBothButton.getComponent(interactableTypeName) as Interactable | null
             if (interactable) {
                 interactable.onTriggerEnd.add(() => this.generateBoth())
             }
@@ -250,7 +439,7 @@ export class PromptDJController extends BaseScriptComponent {
         
         // Tempo Up button
         if (this.tempoUpButton) {
-            const interactable = this.tempoUpButton.getComponent(interactableTypeName) as Interactable
+            const interactable = this.tempoUpButton.getComponent(interactableTypeName) as Interactable | null
             if (interactable) {
                 interactable.onTriggerEnd.add(() => this.increaseTempo())
             }
@@ -258,7 +447,7 @@ export class PromptDJController extends BaseScriptComponent {
         
         // Tempo Down button
         if (this.tempoDownButton) {
-            const interactable = this.tempoDownButton.getComponent(interactableTypeName) as Interactable
+            const interactable = this.tempoDownButton.getComponent(interactableTypeName) as Interactable | null
             if (interactable) {
                 interactable.onTriggerEnd.add(() => this.decreaseTempo())
             }
@@ -266,7 +455,7 @@ export class PromptDJController extends BaseScriptComponent {
         
         // Next Scale button
         if (this.nextScaleButton) {
-            const interactable = this.nextScaleButton.getComponent(interactableTypeName) as Interactable
+            const interactable = this.nextScaleButton.getComponent(interactableTypeName) as Interactable | null
             if (interactable) {
                 interactable.onTriggerEnd.add(() => this.nextScale())
             }
@@ -274,7 +463,7 @@ export class PromptDJController extends BaseScriptComponent {
         
         // Next Drum Style button
         if (this.nextDrumStyleButton) {
-            const interactable = this.nextDrumStyleButton.getComponent(interactableTypeName) as Interactable
+            const interactable = this.nextDrumStyleButton.getComponent(interactableTypeName) as Interactable | null
             if (interactable) {
                 interactable.onTriggerEnd.add(() => this.nextDrumStyle())
             }
@@ -308,23 +497,23 @@ export class PromptDJController extends BaseScriptComponent {
                 
                 // Auto-test after 3 seconds
                 validate(this.autoTestDelayEvent)
-                this.autoTestDelayEvent.reset(3.0)
+                this.autoTestDelayEvent!.reset(3.0)
             }
             
-            this.socket.onmessage = async (event: any) => {
-                let data: any
+            this.socket.onmessage = async (event: WebSocketMessageEvent) => {
+                let data: WebSocketMessage
                 
                 if (event.data instanceof Blob) {
                     const text = await event.data.text()
-                    data = JSON.parse(text)
+                    data = JSON.parse(text) as WebSocketMessage
                 } else {
-                    data = JSON.parse(event.data as string)
+                    data = JSON.parse(event.data as string) as WebSocketMessage
                 }
                 
                 this.handleMessage(data)
             }
             
-            this.socket.onclose = (event: any) => {
+            this.socket.onclose = (event: WebSocketCloseEvent) => {
                 this.isConnected = false
                 
                 if (event.wasClean) {
@@ -339,7 +528,7 @@ export class PromptDJController extends BaseScriptComponent {
                 
                 // Auto-reconnect
                 validate(this.reconnectDelayEvent)
-                this.reconnectDelayEvent.reset(3.0)
+                this.reconnectDelayEvent!.reset(3.0)
             }
             
             this.socket.onerror = () => {
@@ -353,20 +542,29 @@ export class PromptDJController extends BaseScriptComponent {
         }
     }
     
+    /** Disconnect from WebSocket */
+    public disconnect(): void {
+        if (this.socket) {
+            this.socket.close()
+            this.socket = null
+        }
+        this.isConnected = false
+    }
+    
     // ========================================
     // MESSAGE HANDLING
     // ========================================
     
-    private handleMessage(data: any): void {
+    private handleMessage(data: WebSocketMessage): void {
         log.d("Received: " + data.type)
         
         switch (data.type) {
             case "connected":
-                this.handleConnectedMessage(data as ConnectedMessage)
+                this.handleConnectedMessage(data)
                 break
                 
             case "audio_ready":
-                this.handleAudioReady(data as AudioReadyMessage)
+                this.handleAudioReady(data)
                 break
                 
             case "params_updated":
@@ -403,6 +601,8 @@ export class PromptDJController extends BaseScriptComponent {
     
     private handleAudioReady(data: AudioReadyMessage): void {
         log.i("Audio ready!")
+        log.i("  Format: " + data.format)
+        log.i("  Size: " + data.size_bytes + " bytes")
         
         let url = data.url
         
@@ -417,9 +617,12 @@ export class PromptDJController extends BaseScriptComponent {
         
         if (!url) {
             this.updateStatusText("No audio URL")
+            this.onAudioErrorEvent.invoke("No audio URL received")
             return
         }
         
+        // Reset retry counter for new audio
+        this.audioLoadAttempts = 0
         this.currentAudioUrl = url
         this.updateStatusText("Loading audio...")
         log.i("Loading audio from: " + url)
@@ -432,44 +635,139 @@ export class PromptDJController extends BaseScriptComponent {
     // AUDIO PLAYBACK
     // ========================================
     
+    /**
+     * Load and play audio from URL.
+     * 
+     * SPECTACLES AUDIO REQUIREMENTS (from research):
+     * 1. RemoteMediaModule required for remote audio
+     * 2. AudioComponent must be connected
+     * 3. Max 16 concurrent tracks
+     * 4. MP3 format recommended
+     * 5. Mono channel preferred
+     * 6. Under 15 seconds optimal
+     */
     private loadAndPlayAudio(url: string): void {
+        this.audioLoadAttempts++
+        
+        // Validate RemoteMediaModule
         if (!this.remoteMediaModule) {
-            log.e("RemoteMediaModule not connected!")
+            const errorMsg = "RemoteMediaModule not connected! This is REQUIRED for audio playback on Spectacles."
+            log.e(errorMsg)
             this.updateStatusText("No RemoteMediaModule")
+            this.onAudioErrorEvent.invoke(errorMsg)
             return
         }
         
+        // Validate AudioComponent
         if (!this.audioPlayer) {
-            log.e("AudioComponent not connected!")
+            const errorMsg = "AudioComponent not connected! Add an AudioComponent to the scene."
+            log.e(errorMsg)
             this.updateStatusText("No AudioPlayer")
+            this.onAudioErrorEvent.invoke(errorMsg)
+            return
+        }
+        
+        // Validate InternetModule
+        if (!this.internetModule) {
+            const errorMsg = "InternetModule not connected!"
+            log.e(errorMsg)
+            this.updateStatusText("No InternetModule")
+            this.onAudioErrorEvent.invoke(errorMsg)
+            return
+        }
+        
+        // Stop any current playback before loading new audio
+        if (this.isPlaying) {
+            this.stopPlayback()
+        }
+        
+        try {
+            log.i("Creating resource from URL...")
+            const resource = this.internetModule.makeResourceFromUrl(url)
+            
+            log.i("Loading audio asset...")
+            this.remoteMediaModule.loadResourceAsAudioTrackAsset(
+                resource,
+                (audioTrack: AudioTrackAsset) => {
+                    this.onAudioLoaded(audioTrack)
+                },
+                (error: string) => {
+                    this.onAudioLoadError(error)
+                }
+            )
+        } catch (e) {
+            const errorMsg = "Audio loading exception: " + e
+            log.e(errorMsg)
+            this.updateStatusText("Audio error")
+            this.onAudioErrorEvent.invoke(errorMsg)
+            
+            // Retry on exception
+            this.scheduleAudioRetry()
+        }
+    }
+    
+    /**
+     * Called when audio track is successfully loaded.
+     */
+    private onAudioLoaded(audioTrack: AudioTrackAsset): void {
+        log.i("Audio loaded successfully!")
+        
+        if (!this.audioPlayer) {
+            log.e("AudioPlayer disappeared!")
             return
         }
         
         try {
-            const resource = this.internetModule.makeResourceFromUrl(url)
+            // Assign the audio track
+            this.audioPlayer.audioTrack = audioTrack
             
-            this.remoteMediaModule.loadResourceAsAudioTrackAsset(
-                resource,
-                (audioTrack: AudioTrackAsset) => {
-                    log.i("Audio loaded successfully!")
-                    this.updateStatusText("Playing ♪")
-                    
-                    validate(this.audioPlayer)
-                    this.audioPlayer.audioTrack = audioTrack
-                    this.audioPlayer.play(1)
-                    this.isPlaying = true
-                    
-                    this.triggerHapticFeedback()
-                },
-                (error: string) => {
-                    log.e("Failed to load audio: " + error)
-                    this.updateStatusText("Audio load failed")
-                }
-            )
+            // Play the audio (1 = play once)
+            this.audioPlayer.play(1)
+            
+            this.isPlaying = true
+            this.updateStatusText("Playing ♪")
+            log.i("Audio playback started!")
+            
+            // Trigger events
+            this.onAudioPlayingEvent.invoke()
+            this.triggerHapticFeedback()
+            
         } catch (e) {
-            log.e("Audio loading error: " + e)
-            this.updateStatusText("Audio error")
+            const errorMsg = "Error starting playback: " + e
+            log.e(errorMsg)
+            this.updateStatusText("Playback error")
+            this.onAudioErrorEvent.invoke(errorMsg)
         }
+    }
+    
+    /**
+     * Called when audio loading fails.
+     */
+    private onAudioLoadError(error: string): void {
+        log.e("Failed to load audio: " + error)
+        log.e("Attempt " + this.audioLoadAttempts + " of " + this.MAX_AUDIO_LOAD_ATTEMPTS)
+        
+        // Common error causes on Spectacles:
+        // - Network connectivity issues
+        // - Unsupported audio format (use MP3)
+        // - Audio file too large
+        // - CORS issues on server
+        
+        if (this.audioLoadAttempts < this.MAX_AUDIO_LOAD_ATTEMPTS) {
+            this.updateStatusText("Retrying audio...")
+            this.scheduleAudioRetry()
+        } else {
+            this.updateStatusText("Audio load failed")
+            this.onAudioErrorEvent.invoke("Failed after " + this.MAX_AUDIO_LOAD_ATTEMPTS + " attempts: " + error)
+        }
+    }
+    
+    /**
+     * Schedule an audio load retry.
+     */
+    private scheduleAudioRetry(): void {
+        validate(this.audioRetryDelayEvent)
+        this.audioRetryDelayEvent!.reset(1.0) // Retry after 1 second
     }
     
     // ========================================
@@ -497,7 +795,7 @@ export class PromptDJController extends BaseScriptComponent {
     // ========================================
     
     /** Generate a melody with current parameters */
-    generateMelody(): void {
+    public generateMelody(): void {
         this.updateStatusText("Generating melody...")
         this.send("generate_melody", {
             tempo_bpm: this.params.tempo_bpm,
@@ -509,7 +807,7 @@ export class PromptDJController extends BaseScriptComponent {
     }
     
     /** Generate drums with current parameters */
-    generateDrums(): void {
+    public generateDrums(): void {
         this.updateStatusText("Generating drums...")
         this.send("generate_drums", {
             tempo_bpm: this.params.tempo_bpm,
@@ -520,7 +818,7 @@ export class PromptDJController extends BaseScriptComponent {
     }
     
     /** Generate both melody and drums */
-    generateBoth(): void {
+    public generateBoth(): void {
         this.updateStatusText("Generating both...")
         this.send("generate_both", {
             tempo_bpm: this.params.tempo_bpm,
@@ -534,30 +832,34 @@ export class PromptDJController extends BaseScriptComponent {
     }
     
     /** Stop current playback */
-    stopPlayback(): void {
+    public stopPlayback(): void {
         if (this.audioPlayer && this.isPlaying) {
-            this.audioPlayer.stop(true)
+            try {
+                this.audioPlayer.stop(true)
+            } catch (e) {
+                log.w("Error stopping audio: " + e)
+            }
             this.isPlaying = false
             this.updateStatusText("Stopped")
         }
     }
     
     /** Increase tempo by 5 BPM */
-    increaseTempo(): void {
+    public increaseTempo(): void {
         this.params.tempo_bpm = Math.min(180, this.params.tempo_bpm + 5)
         this.updateUI()
         this.syncParams()
     }
     
     /** Decrease tempo by 5 BPM */
-    decreaseTempo(): void {
+    public decreaseTempo(): void {
         this.params.tempo_bpm = Math.max(60, this.params.tempo_bpm - 5)
         this.updateUI()
         this.syncParams()
     }
     
     /** Cycle to next scale */
-    nextScale(): void {
+    public nextScale(): void {
         this.currentScaleIndex = (this.currentScaleIndex + 1) % this.scales.length
         this.params.scale = this.scales[this.currentScaleIndex]
         this.updateUI()
@@ -565,7 +867,7 @@ export class PromptDJController extends BaseScriptComponent {
     }
     
     /** Cycle to previous scale */
-    previousScale(): void {
+    public previousScale(): void {
         this.currentScaleIndex = (this.currentScaleIndex - 1 + this.scales.length) % this.scales.length
         this.params.scale = this.scales[this.currentScaleIndex]
         this.updateUI()
@@ -573,7 +875,7 @@ export class PromptDJController extends BaseScriptComponent {
     }
     
     /** Cycle to next drum style */
-    nextDrumStyle(): void {
+    public nextDrumStyle(): void {
         this.currentDrumStyleIndex = (this.currentDrumStyleIndex + 1) % this.drumStyles.length
         this.params.drum_style = this.drumStyles[this.currentDrumStyleIndex]
         this.updateUI()
@@ -581,31 +883,46 @@ export class PromptDJController extends BaseScriptComponent {
     }
     
     /** Set density (0-1) */
-    setDensity(value: number): void {
+    public setDensity(value: number): void {
         this.params.density = Math.max(0, Math.min(1, value))
         this.syncParams()
     }
     
     /** Set variation (0-1) */
-    setVariation(value: number): void {
+    public setVariation(value: number): void {
         this.params.variation = Math.max(0, Math.min(1, value))
         this.syncParams()
     }
     
     /** Set number of bars */
-    setBars(value: number): void {
+    public setBars(value: number): void {
         this.params.bars = Math.max(2, Math.min(64, value))
         this.syncParams()
     }
     
+    /** Send ping to test connection */
+    public ping(): void {
+        this.send("ping")
+    }
+    
     /** Get current parameters */
-    getParams(): MusicParams {
+    public getParams(): MusicParams {
         return { ...this.params }
     }
     
     /** Check if connected */
-    getIsConnected(): boolean {
+    public getIsConnected(): boolean {
         return this.isConnected
+    }
+    
+    /** Check if playing */
+    public getIsPlaying(): boolean {
+        return this.isPlaying
+    }
+    
+    /** Get current audio URL */
+    public getCurrentAudioUrl(): string | null {
+        return this.currentAudioUrl
     }
     
     // ========================================
@@ -639,12 +956,11 @@ export class PromptDJController extends BaseScriptComponent {
     
     private triggerHapticFeedback(): void {
         try {
-            if ((global as any).HapticFeedbackSystem) {
-                (global as any).HapticFeedbackSystem.hapticFeedback(HapticFeedbackType.Success)
+            if (global.HapticFeedbackSystem) {
+                global.HapticFeedbackSystem.hapticFeedback(HapticFeedbackType.Success)
             }
         } catch (e) {
             // Haptics not available
         }
     }
 }
-

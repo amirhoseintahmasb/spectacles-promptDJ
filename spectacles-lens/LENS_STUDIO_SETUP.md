@@ -1,31 +1,57 @@
-# 🕶️ PromptDJ Lens Studio Setup
+# 🕶️ PromptDJ Lens Studio Setup (TypeScript)
+
+## ⚠️ Critical Audio Requirements for Spectacles
+
+Based on official Snap documentation, these are the **key requirements** for audio playback on Spectacles:
+
+| Requirement | Details |
+|-------------|---------|
+| **Max Concurrent Tracks** | 16 audio assets maximum |
+| **Recommended Format** | MP3 (mono channel) |
+| **Optimal Duration** | Under 15 seconds |
+| **Playback Mode** | LowLatency for immediate response |
+| **Required Modules** | InternetModule + RemoteMediaModule |
+
+---
 
 ## Quick Start
 
-### Step 1: Import Scripts into Lens Studio
+### Step 1: Import TypeScript Scripts into Lens Studio
 
 1. In Lens Studio, go to **Asset Browser**
-2. Right-click → **Add New** → **Script**
-3. Copy the contents from these files:
-   - `PromptDJController.js` - Main WebSocket controller
-   - `PromptDJButtons.js` - Button action handlers
-   - `PinchGestureHandler.js` - Hand gesture detection
-
-Or import directly:
-1. Right-click Asset Browser → **Import Files**
-2. Navigate to `~/music-ai-service/spectacles-lens/Scripts/`
-3. Select all `.js` files
+2. Right-click → **Import Files**
+3. Navigate to `~/music-ai-service/spectacles-lens/Scripts/`
+4. Select all `.ts` files:
+   - `PromptDJController.ts` - Main WebSocket controller
+   - `PromptDJButtons.ts` - Button action handlers
+   - `PromptDJUI.ts` - UI management
+   - `DJButton.ts` - Genre button
+   - `DJControlButton.ts` - Control button
+   - `PinchGestureHandler.ts` - Hand gesture detection
+   - `PromptDJGenreButton.ts` - Genre-specific button
 
 ---
 
-### Step 2: Add InternetModule
+### Step 2: Add Required Modules (CRITICAL!)
+
+⚠️ **Both modules are REQUIRED for audio playback!**
 
 1. In Asset Browser, click **+** → **Internet Module**
-2. This creates an InternetModule asset
+2. Click **+** → **Remote Media Module**
+
+Without RemoteMediaModule, audio will NOT play on Spectacles!
 
 ---
 
-### Step 3: Create Scene Hierarchy
+### Step 3: Add AudioComponent (CRITICAL!)
+
+1. Create a new SceneObject for audio playback
+2. Add **Component** → **Audio** → **Audio Component**
+3. Connect this AudioComponent to the PromptDJController script
+
+---
+
+### Step 4: Create Scene Hierarchy
 
 ```
 Scene
@@ -38,10 +64,11 @@ Scene
 │   └── ...
 │
 ├── PromptDJ_Manager (SceneObject)     ← Create this
-│   └── Script: PromptDJController.js
+│   ├── Script: PromptDJController.ts
+│   └── AudioComponent                  ← Add this!
 │
 ├── Gesture_Handler (SceneObject)       ← Create this
-│   └── Script: PinchGestureHandler.js
+│   └── Script: PinchGestureHandler.ts
 │
 └── UI_Panel (SceneObject)              ← Create this
     ├── Background
@@ -49,64 +76,122 @@ Scene
     ├── TempoText (Text)
     ├── ScaleText (Text)
     ├── DrumStyleText (Text)
+    ├── NowPlayingText (Text)
     └── Buttons
         ├── MelodyButton
-        │   └── Script: PromptDJButtons.js (action: melody)
+        │   └── Script: PromptDJButtons.ts (action: melody)
         ├── DrumsButton
-        │   └── Script: PromptDJButtons.js (action: drums)
+        │   └── Script: PromptDJButtons.ts (action: drums)
         ├── BothButton
-        │   └── Script: PromptDJButtons.js (action: both)
+        │   └── Script: PromptDJButtons.ts (action: both)
         ├── TempoUpButton
-        │   └── Script: PromptDJButtons.js (action: tempoUp)
+        │   └── Script: PromptDJButtons.ts (action: tempoUp)
         ├── TempoDownButton
-        │   └── Script: PromptDJButtons.js (action: tempoDown)
+        │   └── Script: PromptDJButtons.ts (action: tempoDown)
         └── NextScaleButton
-            └── Script: PromptDJButtons.js (action: nextScale)
+            └── Script: PromptDJButtons.ts (action: nextScale)
 ```
 
 ---
 
-### Step 4: Configure PromptDJController
+### Step 5: Configure PromptDJController
 
 Select the **PromptDJ_Manager** object and in Inspector:
 
-| Input | Value |
-|-------|-------|
-| **Internet Module** | Drag your InternetModule asset here |
-| **Backend Url** | `ws://YOUR_MAC_IP:8123/ws/spectacles/` |
-| **Status Text** | Drag StatusText object |
-| **Tempo Text** | Drag TempoText object |
-| **Scale Text** | Drag ScaleText object |
-| **Drum Style Text** | Drag DrumStyleText object |
+| Input | Value | Required |
+|-------|-------|----------|
+| **Internet Module** | Drag your InternetModule asset | ✅ YES |
+| **Remote Media Module** | Drag your RemoteMediaModule asset | ✅ YES |
+| **Backend Url** | `ws://YOUR_MAC_IP:8123/ws/spectacles/` | ✅ YES |
+| **Audio Player** | Drag the AudioComponent | ✅ YES |
+| **Use Low Latency Audio** | ✅ Checked (recommended) | Optional |
+| **Status Text** | Drag StatusText object | Optional |
+| **Tempo Text** | Drag TempoText object | Optional |
+| **Scale Text** | Drag ScaleText object | Optional |
+| **Drum Style Text** | Drag DrumStyleText object | Optional |
 
 **Important:** Replace `YOUR_MAC_IP` with your actual IP (e.g., `172.20.10.3`)
 
 ---
 
-### Step 5: Configure Button Scripts
+### Step 6: Configure Button Scripts
 
 For each button, select it and configure:
 
 | Input | Value |
 |-------|-------|
-| **Controller Object** | Drag PromptDJ_Manager object |
+| **Controller Object** | Drag PromptDJ_Manager object (optional - uses global) |
 | **Action** | Select from dropdown (melody, drums, both, etc.) |
 
-Then connect the button's **OnTriggerEnd** event to call `onButtonPressed`.
+**Note:** Buttons will automatically find the controller via `global.promptDJController` if not linked.
 
 ---
 
-### Step 6: Configure Pinch Gesture Handler
+### Step 7: Configure Pinch Gesture Handler
 
 Select **Gesture_Handler** and configure:
 
 | Input | Value |
 |-------|-------|
-| **Controller Object** | Drag PromptDJ_Manager object |
+| **Controller Object** | Drag PromptDJ_Manager object (optional - uses global) |
 | **Right Hand Tracking** | Drag RightHandInteractor script |
 | **Left Hand Tracking** | Drag LeftHandInteractor script |
 | **Pinch Threshold** | 0.8 (adjust sensitivity) |
 | **Cooldown Time** | 0.5 (seconds between triggers) |
+
+---
+
+## 🔊 Audio Playback Deep Dive
+
+### Why Audio Might Not Play
+
+Based on Snap's official documentation, here are the common causes:
+
+1. **Missing RemoteMediaModule** - Required for loading remote audio
+2. **Missing AudioComponent** - Required for playback
+3. **Too Many Concurrent Tracks** - Max 16 at once
+4. **Wrong Audio Format** - Use MP3, mono channel
+5. **Audio Too Long** - Keep under 15 seconds for best results
+6. **Low Power Mode** - Default mode has latency; use LowLatency
+
+### Audio Playback Mode
+
+Spectacles default all Audio Components to **Low Power** mode to save battery. This introduces latency.
+
+For immediate response (like button feedback), use **Low Latency** mode:
+
+```typescript
+// This is automatically done in PromptDJController if useLowLatencyAudio is true
+if (Audio.PlaybackMode) {
+    audioComponent.playbackMode = Audio.PlaybackMode.LowLatency
+}
+```
+
+### Server-Side Audio Requirements
+
+Your backend server should:
+
+1. **Return MP3 format** (not WAV) for better compatibility
+2. **Use mono channel** for smaller file size
+3. **Keep duration under 15 seconds** for optimal performance
+4. **Set proper CORS headers** for Spectacles to fetch audio
+
+---
+
+## Global Controller Access
+
+The TypeScript version registers the controller globally, so any script can access it:
+
+```typescript
+// From any script
+if (global.promptDJController) {
+    global.promptDJController.generateMelody()
+    global.promptDJController.generateDrums()
+    global.promptDJController.generateBoth()
+}
+```
+
+This fixes the `TypeError: cannot set property 'generateMelody' of undefined` error.
 
 ---
 
@@ -154,7 +239,26 @@ This test page lets you verify the WebSocket works before testing on Spectacles.
 
 ---
 
-## Troubleshooting
+## 🔧 Troubleshooting
+
+### Sound Not Playing (Most Common Issue)
+
+**Checklist:**
+- [ ] RemoteMediaModule added and connected?
+- [ ] AudioComponent added and connected?
+- [ ] InternetModule added and connected?
+- [ ] Backend returning MP3 format (not WAV)?
+- [ ] Audio file under 15 seconds?
+- [ ] Less than 16 concurrent audio tracks?
+- [ ] Spectacles volume turned up?
+- [ ] Same WiFi network as backend?
+
+**Debug Steps:**
+1. Check Logger panel for error messages
+2. Look for "Audio loaded successfully!" message
+3. If you see "RemoteMediaModule not connected" - add the module
+4. If you see "AudioComponent not connected" - add the component
+5. If you see "Failed to load audio" - check audio format/URL
 
 ### "Not connected" or connection fails
 
@@ -169,11 +273,39 @@ This test page lets you verify the WebSocket works before testing on Spectacles.
 - Drag it to the script's internetModule input
 - InternetModule only works on Spectacles/Camera Kit (not in Preview)
 
+### RemoteMediaModule errors
+
+- Make sure you added RemoteMediaModule to Asset Browser
+- Drag it to the script's remoteMediaModule input
+- Required for loading remote audio
+
 ### Gestures not working
 
 - Verify SpectaclesInteractionKit is set up correctly
 - Check hand tracking is enabled in Project Settings
 - Look at Logger panel for debug messages
+
+### Audio plays in Preview but not on Spectacles
+
+- Spectacles have stricter audio requirements
+- Convert audio to MP3 mono
+- Reduce audio duration
+- Check Spectacles firmware is up to date
+
+---
+
+## TypeScript Files
+
+```
+~/music-ai-service/spectacles-lens/Scripts/
+├── PromptDJController.ts    ← Main WebSocket controller (registers globally)
+├── PromptDJButtons.ts       ← Button handlers (uses global controller)
+├── PromptDJUI.ts            ← UI management
+├── DJButton.ts              ← Genre button
+├── DJControlButton.ts       ← Control button
+├── PinchGestureHandler.ts   ← Gesture detection
+└── PromptDJGenreButton.ts   ← Genre-specific button
+```
 
 ---
 
@@ -181,42 +313,71 @@ This test page lets you verify the WebSocket works before testing on Spectacles.
 
 ### PromptDJController Methods
 
-```javascript
+```typescript
 // Generate music
-script.generateMelody()    // Generate melody
-script.generateDrums()     // Generate drums
-script.generateBoth()      // Generate both
+controller.generateMelody()    // Generate melody
+controller.generateDrums()     // Generate drums
+controller.generateBoth()      // Generate both
 
 // Adjust parameters
-script.increaseTempo()     // +5 BPM
-script.decreaseTempo()     // -5 BPM
-script.nextScale()         // Cycle scale
-script.previousScale()     // Previous scale
-script.nextDrumStyle()     // Cycle drum style
+controller.increaseTempo()     // +5 BPM
+controller.decreaseTempo()     // -5 BPM
+controller.nextScale()         // Cycle scale
+controller.previousScale()     // Previous scale
+controller.nextDrumStyle()     // Cycle drum style
 
 // Set values directly
-script.setDensity(0.6)     // 0-1
-script.setVariation(0.4)   // 0-1
-script.setBars(16)         // 2-64
+controller.setDensity(0.6)     // 0-1
+controller.setVariation(0.4)   // 0-1
+controller.setBars(16)         // 2-64
 
 // Utilities
-script.ping()              // Test connection
-script.isConnected()       // Check status
-script.getParams()         // Get current params
+controller.ping()              // Test connection
+controller.getIsConnected()    // Check status
+controller.getIsPlaying()      // Check if audio playing
+controller.getParams()         // Get current params
+controller.getCurrentAudioUrl() // Get current audio URL
+
+// Direct params access
+controller.params.tempo_bpm = 120
+controller.params.scale = "C_major"
+controller.params.drum_style = "techno"
+```
+
+### Events
+
+```typescript
+// Subscribe to events
+controller.onConnected.add(() => {
+    print("Connected to backend!")
+})
+
+controller.onAudioReady.add((url: string) => {
+    print("Audio ready: " + url)
+})
+
+controller.onAudioPlaying.add(() => {
+    print("Audio is now playing!")
+})
+
+controller.onAudioError.add((error: string) => {
+    print("Audio error: " + error)
+})
+
+controller.onParamsChanged.add((params: MusicParams) => {
+    print("Params changed: " + params.tempo_bpm + " BPM")
+})
 ```
 
 ---
 
-## Files Location
+## 📚 References
 
-```
-~/music-ai-service/spectacles-lens/Scripts/
-├── PromptDJController.js    ← Main WebSocket controller
-├── PromptDJButtons.js       ← Button handlers
-└── PinchGestureHandler.js   ← Gesture detection
-```
+- [Spectacles Audio Documentation](https://developers.snap.com/spectacles/about-spectacles-features/audio)
+- [Spectacles FAQ - Components](https://developers.snap.com/spectacles/support/spectacles-faq/components)
+- [Lens Studio Audio Guide](https://developers.snap.com/lens-studio/features/audio/playing-audio)
+- [Audio Track Assets](https://developers.snap.com/lens-studio/features/audio/audio-track-assets)
 
 ---
 
-*Built for Snap Spectacles 2024 with InternetModule WebSocket API* 🕶️
-
+*Built for Snap Spectacles 2024 with TypeScript and InternetModule WebSocket API* 🕶️
