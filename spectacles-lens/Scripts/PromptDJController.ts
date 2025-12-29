@@ -152,10 +152,8 @@ interface DelayedCallbackEvent {
     reset: (delay: number) => void
 }
 
-/** Extended AudioComponent with playbackMode */
-interface ExtendedAudioComponent extends AudioComponent {
-    playbackMode?: number
-}
+// Note: AudioComponent in Lens Studio already has playbackMode property
+// No extension needed - we can use AudioComponent directly
 
 /**
  * Main controller for PromptDJ music generation.
@@ -383,14 +381,11 @@ export class PromptDJController extends BaseScriptComponent {
             return
         }
         
-        // Cast to extended interface to access playbackMode
-        const extendedAudio = this.audioPlayer as ExtendedAudioComponent
-        
         // Set Low Latency mode for immediate playback (Spectacles specific)
         if (this.useLowLatencyAudio) {
             try {
                 if (typeof Audio !== 'undefined' && Audio.PlaybackMode) {
-                    extendedAudio.playbackMode = Audio.PlaybackMode.LowLatency
+                    this.audioPlayer.playbackMode = Audio.PlaybackMode.LowLatency
                     log.i("Audio playback mode set to LowLatency")
                 } else {
                     log.d("Audio.PlaybackMode not available - using default mode")
