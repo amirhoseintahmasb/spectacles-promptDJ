@@ -829,37 +829,93 @@ export class PromptDJController extends BaseScriptComponent {
         }
         
         try {
+            // Store reference to audio player to avoid null issues
+            const audioPlayer = this.audioPlayer
+            if (!audioPlayer) {
+                const errorMsg = "AudioPlayer is null"
+                log.e(errorMsg)
+                this.updateStatusText("No AudioPlayer")
+                this.onAudioErrorEvent.invoke(errorMsg)
+                return
+            }
+            
             // Stop any current playback first
             if (this.isPlaying) {
                 try {
-                    this.audioPlayer.stop(true)
+                    audioPlayer.stop(true)
                 } catch (e) {
                     log.d("No audio to stop: " + e)
                 }
             }
             
+            // Ensure audio player is enabled
+            if (!audioPlayer.enabled) {
+                audioPlayer.enabled = true
+                log.d("Enabled AudioComponent")
+            }
+            
             // Assign the audio track
-            this.audioPlayer.audioTrack = audioTrack
+            audioPlayer.audioTrack = audioTrack
+            log.d("Audio track assigned")
+            
+            // Validate track was assigned
+            if (!audioPlayer.audioTrack) {
+                const errorMsg = "Failed to assign audio track"
+                log.e(errorMsg)
+                this.updateStatusText("Track assignment failed")
+                this.onAudioErrorEvent.invoke(errorMsg)
+                return
+            }
             
             // Small delay to ensure track is assigned (helps with Spectacles validation)
             // This fixes the "cannot play audio" configuration validator error
-            validate(this.audioPlayDelayEvent)
-            this.audioPlayDelayEvent!.bind(() => {
+            if (!this.audioPlayDelayEvent) {
+                log.e("audioPlayDelayEvent is null - cannot delay playback")
+                // Try immediate playback as fallback
                 try {
-                    // Validate track is still assigned
-                    if (!this.audioPlayer || !this.audioPlayer.audioTrack) {
+                    audioPlayer.play(1)
+                    this.isPlaying = true
+                    this.updateStatusText("Playing ♪")
+                    log.i("Audio playback started (immediate)")
+                    this.onAudioPlayingEvent.invoke()
+                    this.triggerHapticFeedback()
+                } catch (e) {
+                    const errorMsg = "Immediate playback failed: " + e
+                    log.e(errorMsg)
+                    this.updateStatusText("Playback failed")
+                    this.onAudioErrorEvent.invoke(errorMsg)
+                }
+                return
+            }
+            
+            validate(this.audioPlayDelayEvent)
+            
+            // Store references in closure to avoid null issues
+            const trackRef = audioTrack
+            const playerRef = audioPlayer
+            
+            this.audioPlayDelayEvent.bind(() => {
+                try {
+                    // Validate references are still valid
+                    if (!playerRef) {
+                        log.e("AudioPlayer reference lost")
+                        this.onAudioErrorEvent.invoke("AudioPlayer lost")
+                        return
+                    }
+                    
+                    if (!playerRef.audioTrack) {
                         log.e("Audio track lost before playback")
                         this.onAudioErrorEvent.invoke("Audio track lost")
                         return
                     }
                     
-                    // Ensure audio player is enabled
-                    if (!this.audioPlayer.enabled) {
-                        this.audioPlayer.enabled = true
+                    // Ensure audio player is still enabled
+                    if (!playerRef.enabled) {
+                        playerRef.enabled = true
                     }
                     
                     // Play the audio (1 = play once)
-                    this.audioPlayer!.play(1)
+                    playerRef.play(1)
                     
                     this.isPlaying = true
                     this.updateStatusText("Playing ♪")
@@ -872,15 +928,19 @@ export class PromptDJController extends BaseScriptComponent {
                 } catch (e) {
                     const errorMsg = "Error starting playback: " + e
                     log.e(errorMsg)
+                    log.e("Stack: " + (e instanceof Error ? e.stack : "N/A"))
                     this.updateStatusText("Playback error")
                     this.onAudioErrorEvent.invoke(errorMsg)
                 }
             })
-            this.audioPlayDelayEvent!.reset(0.1) // 100ms delay for validation
+            
+            this.audioPlayDelayEvent.reset(0.1) // 100ms delay for validation
+            log.d("Scheduled audio playback (100ms delay)")
             
         } catch (e) {
             const errorMsg = "Error setting up playback: " + e
             log.e(errorMsg)
+            log.e("Stack: " + (e instanceof Error ? e.stack : "N/A"))
             this.updateStatusText("Playback setup error")
             this.onAudioErrorEvent.invoke(errorMsg)
         }
