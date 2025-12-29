@@ -266,6 +266,7 @@ export class PromptDJController extends BaseScriptComponent {
     private reconnectDelayEvent: DelayedCallbackEvent | null = null
     private autoTestDelayEvent: DelayedCallbackEvent | null = null
     private audioRetryDelayEvent: DelayedCallbackEvent | null = null
+    private audioPlayDelayEvent: DelayedCallbackEvent | null = null
     
     // ========================================
     // EVENTS
@@ -694,30 +695,82 @@ export class PromptDJController extends BaseScriptComponent {
     private onAudioLoaded(audioTrack: AudioTrackAsset): void {
         log.i("Audio loaded successfully!")
         
-        if (!this.audioPlayer) {
-            log.e("AudioPlayer disappeared!")
+        // Validate audio track
+        if (!audioTrack) {
+            const errorMsg = "Audio track is null or invalid"
+            log.e(errorMsg)
+            this.updateStatusText("Invalid audio track")
+            this.onAudioErrorEvent.invoke(errorMsg)
             return
         }
         
+        // Validate audio player
+        if (!this.audioPlayer) {
+            log.e("AudioPlayer disappeared!")
+            this.onAudioErrorEvent.invoke("AudioPlayer not available")
+            return
+        }
+        
+        // Validate audio player is enabled
+        if (!this.audioPlayer.enabled) {
+            log.w("AudioPlayer is disabled - enabling it...")
+            this.audioPlayer.enabled = true
+        }
+        
         try {
+            // Stop any current playback first
+            if (this.isPlaying) {
+                try {
+                    this.audioPlayer.stop(true)
+                } catch (e) {
+                    log.d("No audio to stop: " + e)
+                }
+            }
+            
             // Assign the audio track
             this.audioPlayer.audioTrack = audioTrack
             
-            // Play the audio (1 = play once)
-            this.audioPlayer.play(1)
-            
-            this.isPlaying = true
-            this.updateStatusText("Playing ♪")
-            log.i("Audio playback started!")
-            
-            // Trigger events
-            this.onAudioPlayingEvent.invoke()
-            this.triggerHapticFeedback()
+            // Small delay to ensure track is assigned (helps with Spectacles validation)
+            // This fixes the "cannot play audio" configuration validator error
+            validate(this.audioPlayDelayEvent)
+            this.audioPlayDelayEvent!.bind(() => {
+                try {
+                    // Validate track is still assigned
+                    if (!this.audioPlayer || !this.audioPlayer.audioTrack) {
+                        log.e("Audio track lost before playback")
+                        this.onAudioErrorEvent.invoke("Audio track lost")
+                        return
+                    }
+                    
+                    // Ensure audio player is enabled
+                    if (!this.audioPlayer.enabled) {
+                        this.audioPlayer.enabled = true
+                    }
+                    
+                    // Play the audio (1 = play once)
+                    this.audioPlayer!.play(1)
+                    
+                    this.isPlaying = true
+                    this.updateStatusText("Playing ♪")
+                    log.i("Audio playback started!")
+                    
+                    // Trigger events
+                    this.onAudioPlayingEvent.invoke()
+                    this.triggerHapticFeedback()
+                    
+                } catch (e) {
+                    const errorMsg = "Error starting playback: " + e
+                    log.e(errorMsg)
+                    this.updateStatusText("Playback error")
+                    this.onAudioErrorEvent.invoke(errorMsg)
+                }
+            })
+            this.audioPlayDelayEvent!.reset(0.1) // 100ms delay for validation
             
         } catch (e) {
-            const errorMsg = "Error starting playback: " + e
+            const errorMsg = "Error setting up playback: " + e
             log.e(errorMsg)
-            this.updateStatusText("Playback error")
+            this.updateStatusText("Playback setup error")
             this.onAudioErrorEvent.invoke(errorMsg)
         }
     }

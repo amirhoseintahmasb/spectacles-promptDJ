@@ -35,6 +35,8 @@ type ControlAction =
     | "next" 
     | "previous" 
     | "regenerate"
+    | "bpmUp"
+    | "bpmDown"
 
 /**
  * Control button for DJ interface.
@@ -52,7 +54,7 @@ export class DJControlButton extends BaseScriptComponent {
     uiController: SceneObject | undefined
     
     @input
-    @hint("Action to perform (start, stop, random, next, previous, regenerate)")
+    @hint("Action to perform (start, stop, random, next, previous, regenerate, bpmUp, bpmDown)")
     action: string = "start"
     
     // ========================================
@@ -191,6 +193,26 @@ export class DJControlButton extends BaseScriptComponent {
                     this.ui.regenerate()
                 } else if (this.controller) {
                     this.controller.generateBoth()
+                } else {
+                    log.e("No controller found for action: " + this.action)
+                }
+                break
+                
+            case "bpmUp":
+                if (this.ui) {
+                    this.ui.increaseBPM()
+                } else if (this.controller) {
+                    this.controller.increaseTempo()
+                } else {
+                    log.e("No controller found for action: " + this.action)
+                }
+                break
+                
+            case "bpmDown":
+                if (this.ui) {
+                    this.ui.decreaseBPM()
+                } else if (this.controller) {
+                    this.controller.decreaseTempo()
                 } else {
                     log.e("No controller found for action: " + this.action)
                 }

@@ -273,6 +273,58 @@ export class PromptDJUI extends BaseScriptComponent {
         this.selectGenre(GENRES[randomIndex].id)
     }
     
+    /**
+     * Increase BPM by 5.
+     */
+    public increaseBPM(): void {
+        if (!this.controller) {
+            this.findController()
+        }
+        
+        if (this.controller) {
+            this.controller.increaseTempo()
+            if (this.currentGenre) {
+                this.currentGenre.tempo = this.controller.params.tempo_bpm
+                this.updateNowPlaying("♪ " + this.currentGenre.name + " - " + this.currentGenre.tempo + " BPM")
+            }
+        }
+    }
+    
+    /**
+     * Decrease BPM by 5.
+     */
+    public decreaseBPM(): void {
+        if (!this.controller) {
+            this.findController()
+        }
+        
+        if (this.controller) {
+            this.controller.decreaseTempo()
+            if (this.currentGenre) {
+                this.currentGenre.tempo = this.controller.params.tempo_bpm
+                this.updateNowPlaying("♪ " + this.currentGenre.name + " - " + this.currentGenre.tempo + " BPM")
+            }
+        }
+    }
+    
+    /**
+     * Set BPM to a specific value.
+     */
+    public setBPM(bpm: number): void {
+        if (!this.controller) {
+            this.findController()
+        }
+        
+        if (this.controller) {
+            const clampedBPM = Math.max(60, Math.min(180, bpm))
+            this.controller.params.tempo_bpm = clampedBPM
+            if (this.currentGenre) {
+                this.currentGenre.tempo = clampedBPM
+                this.updateNowPlaying("♪ " + this.currentGenre.name + " - " + clampedBPM + " BPM")
+            }
+        }
+    }
+    
     // ========================================
     // GENRE SHORTCUTS
     // ========================================
