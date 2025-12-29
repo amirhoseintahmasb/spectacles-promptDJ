@@ -161,7 +161,7 @@ export class PromptDJController extends BaseScriptComponent {
     remoteMediaModule!: any
     
     @input
-    @hint("WebSocket backend URL (ws://IP:8123/ws/spectacles/) - Use 127.0.0.1 for Lens Studio Preview, network IP for real Spectacles")
+    @hint("WebSocket backend URL (ws://IP:8123/ws/spectacles/) - Use 127.0.0.1 for Lens Studio Preview, network IP for real Spectacles. Must end with /")
     backendUrl: string = "ws://127.0.0.1:8123/ws/spectacles/"
     
     @input
@@ -458,23 +458,86 @@ export class PromptDJController extends BaseScriptComponent {
     // ========================================
     
     private connect(): void {
+        // Validate InternetModule
         if (!this.internetModule) {
-            log.e("InternetModule not connected!")
+            const errorMsg = "InternetModule not connected! Add InternetModule asset and connect it."
+            log.e(errorMsg)
             this.updateStatusText("No InternetModule")
             return
         }
         
-        const url = this.backendUrl + this.clientId
-        log.i("Connecting to " + url)
+        // Validate backend URL
+        if (!this.backendUrl || this.backendUrl.trim() === "") {
+            const errorMsg = "Backend URL is empty! Set backendUrl in Inspector."
+            log.e(errorMsg)
+            this.updateStatusText("No Backend URL")
+            return
+        }
+        
+        // Normalize backend URL (ensure it ends with /)
+        let normalizedUrl = this.backendUrl.trim()
+        if (!normalizedUrl.endsWith("/")) {
+            normalizedUrl += "/"
+            log.w("Backend URL missing trailing slash, added automatically")
+        }
+        
+        // Build WebSocket URL
+        // Format: ws://IP:PORT/ws/spectacles/CLIENT_ID
+        const url = normalizedUrl + this.clientId
+        log.i("Connecting to: " + url)
+        log.i("Client ID: " + this.clientId)
+        log.i("Backend URL: " + normalizedUrl)
         this.updateStatusText("Connecting...")
         
+        // Validate URL format
+        if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
+            const errorMsg = "Invalid WebSocket URL! Must start with ws:// or wss://"
+            log.e(errorMsg)
+            log.e("Current URL: " + url)
+            log.e("Expected format: ws://IP:PORT/ws/spectacles/")
+            this.updateStatusText("Invalid URL")
+            return
+        }
+        
+        // Validate URL structure (simple regex check)
+        const urlPattern = /^wss?:\/\/[^\/]+:\d+\/.+/
+        if (!urlPattern.test(url)) {
+            const errorMsg = "Invalid URL format - check IP and port"
+            log.e(errorMsg)
+            log.e("URL: " + url)
+            log.e("Expected format: ws://IP:PORT/ws/spectacles/")
+            log.e("Example: ws://172.20.10.2:8123/ws/spectacles/")
+            this.updateStatusText("Invalid URL format")
+            return
+        }
+        
+        log.d("URL validation passed")
+        
+        // Warn if using localhost on real Spectacles
+        if (url.includes("127.0.0.1") || url.includes("localhost")) {
+            log.w("Using localhost URL - this only works in Lens Studio Preview!")
+            log.w("For real Spectacles, use your network IP (e.g., ws://172.20.10.2:8123/ws/spectacles/)")
+        }
+        
         try {
+            log.d("Creating WebSocket connection...")
             this.socket = this.internetModule.createWebSocket(url)
+            
+            if (!this.socket) {
+                const errorMsg = "createWebSocket returned null - check InternetModule configuration"
+                log.e(errorMsg)
+                this.updateStatusText("WebSocket creation failed")
+                return
+            }
+            
             this.socket.binaryType = "blob"
+            log.d("WebSocket created, setting up handlers...")
             
             this.socket.onopen = () => {
                 this.isConnected = true
-                log.i("Connected!")
+                log.i("✓ WebSocket Connected!")
+                log.i("  URL: " + url)
+                log.i("  Client ID: " + this.clientId)
                 this.updateStatusText("Connected ✓")
                 this.onConnectedEvent.invoke()
                 
@@ -484,44 +547,92 @@ export class PromptDJController extends BaseScriptComponent {
             }
             
             this.socket.onmessage = async (event: WebSocketMessageEvent) => {
-                let data: WebSocketMessage
-                
-                if (event.data instanceof Blob) {
-                    const text = await event.data.text()
-                    data = JSON.parse(text) as WebSocketMessage
-                } else {
-                    data = JSON.parse(event.data as string) as WebSocketMessage
+                try {
+                    let data: WebSocketMessage
+                    
+                    if (event.data instanceof Blob) {
+                        const text = await event.data.text()
+                        data = JSON.parse(text) as WebSocketMessage
+                    } else {
+                        data = JSON.parse(event.data as string) as WebSocketMessage
+                    }
+                    
+                    this.handleMessage(data)
+                } catch (e) {
+                    log.e("Error parsing WebSocket message: " + e)
+                    log.e("Raw data: " + (event.data instanceof Blob ? "[Blob]" : event.data))
                 }
-                
-                this.handleMessage(data)
             }
             
             this.socket.onclose = (event: WebSocketCloseEvent) => {
                 this.isConnected = false
                 
+                log.i("WebSocket closed:")
+                log.i("  Code: " + event.code)
+                log.i("  Reason: " + (event.reason || "none"))
+                log.i("  Was Clean: " + event.wasClean)
+                
                 if (event.wasClean) {
                     log.i("Connection closed cleanly")
                     this.updateStatusText("Disconnected")
                 } else {
-                    log.w("Connection lost, code: " + event.code)
-                    this.updateStatusText("Connection lost")
+                    log.w("Connection lost unexpectedly!")
+                    log.w("  Close code: " + event.code)
+                    log.w("  Reason: " + (event.reason || "unknown"))
+                    
+                    // Common error codes
+                    if (event.code === 1006) {
+                        log.e("Error 1006: Abnormal closure - check network connection and server status")
+                        this.updateStatusText("Connection failed (1006)")
+                    } else if (event.code === 1002) {
+                        log.e("Error 1002: Protocol error - check WebSocket URL format")
+                        this.updateStatusText("Protocol error (1002)")
+                    } else if (event.code === 1003) {
+                        log.e("Error 1003: Unsupported data - check message format")
+                        this.updateStatusText("Data error (1003)")
+                    } else {
+                        this.updateStatusText("Connection lost (" + event.code + ")")
+                    }
                 }
                 
                 this.onDisconnectedEvent.invoke()
                 
-                // Auto-reconnect
-                validate(this.reconnectDelayEvent)
-                this.reconnectDelayEvent!.reset(3.0)
+                // Auto-reconnect only if not a clean close
+                if (!event.wasClean) {
+                    validate(this.reconnectDelayEvent)
+                    this.reconnectDelayEvent!.reset(3.0)
+                }
             }
             
-            this.socket.onerror = () => {
-                log.e("WebSocket error")
+            this.socket.onerror = (event: WebSocketErrorEvent) => {
+                log.e("WebSocket error occurred!")
+                log.e("  Event type: " + (event.type || "unknown"))
+                log.e("  URL: " + url)
+                
+                // Common issues
+                log.e("Troubleshooting:")
+                log.e("  1. Check server is running: curl http://YOUR_IP:8123/api")
+                log.e("  2. Verify WebSocket URL format: ws://IP:PORT/ws/spectacles/")
+                log.e("  3. Check firewall allows port 8123")
+                log.e("  4. Ensure same WiFi network")
+                log.e("  5. For real Spectacles, use network IP (not 127.0.0.1)")
+                
                 this.updateStatusText("Connection error")
             }
             
+            log.d("WebSocket handlers configured, waiting for connection...")
+            
         } catch (e) {
-            log.e("Failed to connect: " + e)
+            const errorMsg = "Failed to create WebSocket: " + e
+            log.e(errorMsg)
+            log.e("Stack trace: " + (e instanceof Error ? e.stack : "N/A"))
             this.updateStatusText("Failed to connect")
+            
+            // Additional diagnostics
+            log.e("Diagnostics:")
+            log.e("  InternetModule: " + (this.internetModule ? "✓" : "✗"))
+            log.e("  Backend URL: " + this.backendUrl)
+            log.e("  Full URL: " + url)
         }
     }
     
@@ -938,6 +1049,54 @@ export class PromptDJController extends BaseScriptComponent {
     /** Send ping to test connection */
     public ping(): void {
         this.send("ping")
+    }
+    
+    /**
+     * Test WebSocket connection and log diagnostics.
+     * Call this to debug connection issues.
+     */
+    public testConnection(): void {
+        log.i("=== WebSocket Connection Test ===")
+        log.i("InternetModule: " + (this.internetModule ? "✓ Connected" : "✗ Missing"))
+        log.i("RemoteMediaModule: " + (this.remoteMediaModule ? "✓ Connected" : "✗ Missing"))
+        log.i("AudioPlayer: " + (this.audioPlayer ? "✓ Connected" : "✗ Missing"))
+        log.i("Backend URL: " + this.backendUrl)
+        log.i("Client ID: " + this.clientId)
+        log.i("Full WebSocket URL: " + (this.backendUrl + this.clientId))
+        log.i("Is Connected: " + this.isConnected)
+        log.i("Socket: " + (this.socket ? "✓ Active" : "✗ Null"))
+        
+        if (!this.internetModule) {
+            log.e("ERROR: InternetModule not connected!")
+            log.e("  → Add InternetModule asset in Asset Browser")
+            log.e("  → Drag it to PromptDJController's 'Internet Module' input")
+            return
+        }
+        
+        if (!this.backendUrl || this.backendUrl.trim() === "") {
+            log.e("ERROR: Backend URL is empty!")
+            log.e("  → Set 'Backend Url' in Inspector")
+            log.e("  → Format: ws://YOUR_IP:8123/ws/spectacles/")
+            log.e("  → Use 127.0.0.1 for Preview, network IP for real Spectacles")
+            return
+        }
+        
+        const url = this.backendUrl + this.clientId
+        if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
+            log.e("ERROR: Invalid WebSocket URL format!")
+            log.e("  → Must start with ws:// or wss://")
+            log.e("  → Current: " + url)
+            return
+        }
+        
+        if (url.includes("127.0.0.1") || url.includes("localhost")) {
+            log.w("WARNING: Using localhost - only works in Lens Studio Preview!")
+            log.w("  → For real Spectacles, use network IP")
+            log.w("  → Get IP: ipconfig getifaddr en0")
+        }
+        
+        log.i("Attempting connection...")
+        this.connect()
     }
     
     /** Get current parameters */
