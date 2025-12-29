@@ -801,9 +801,9 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                     midi_path = generate_melody_midi(req)
                     
                     # Render to audio
-                await manager.send_json(websocket, {"type": "status", "message": "Rendering audio..."})
-                # Use MP3 for Spectacles (better compatibility than WAV)
-                audio_path, audio_url = generate_audio_from_midi(midi_path, format="mp3")
+                    await manager.send_json(websocket, {"type": "status", "message": "Rendering audio..."})
+                    # Use MP3 for Spectacles (better compatibility than WAV)
+                    audio_path, audio_url = generate_audio_from_midi(midi_path, format="mp3")
                     
                     # Get file size
                     audio_size = os.path.getsize(audio_path)
@@ -846,9 +846,9 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                     midi_path = generate_drums_midi(req)
                     
                     # Render to audio
-                await manager.send_json(websocket, {"type": "status", "message": "Rendering audio..."})
-                # Use MP3 for Spectacles (better compatibility than WAV)
-                audio_path, audio_url = generate_audio_from_midi(midi_path, format="mp3")
+                    await manager.send_json(websocket, {"type": "status", "message": "Rendering audio..."})
+                    # Use MP3 for Spectacles (better compatibility than WAV)
+                    audio_path, audio_url = generate_audio_from_midi(midi_path, format="mp3")
                     
                     # Get file size
                     audio_size = os.path.getsize(audio_path)
