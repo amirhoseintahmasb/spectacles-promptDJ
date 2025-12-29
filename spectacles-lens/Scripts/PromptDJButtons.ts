@@ -35,20 +35,9 @@ export class PromptDJButton extends BaseScriptComponent {
     @hint("Reference to the PromptDJ Controller SceneObject")
     controllerObject!: SceneObject
     
+    // @input string action {"widget":"combobox", "values":[{"label":"Generate Melody", "value":"melody"}, {"label":"Generate Drums", "value":"drums"}, {"label":"Generate Both", "value":"both"}, {"label":"Tempo Up", "value":"tempoUp"}, {"label":"Tempo Down", "value":"tempoDown"}, {"label":"Next Scale", "value":"nextScale"}, {"label":"Previous Scale", "value":"prevScale"}, {"label":"Next Drum Style", "value":"nextDrumStyle"}, {"label":"Stop Playback", "value":"stop"}]}
     @input
     @hint("Action to perform when button is pressed")
-    @widget("combobox")
-    @values([
-        { label: "Generate Melody", value: "melody" },
-        { label: "Generate Drums", value: "drums" },
-        { label: "Generate Both", value: "both" },
-        { label: "Tempo Up", value: "tempoUp" },
-        { label: "Tempo Down", value: "tempoDown" },
-        { label: "Next Scale", value: "nextScale" },
-        { label: "Previous Scale", value: "prevScale" },
-        { label: "Next Drum Style", value: "nextDrumStyle" },
-        { label: "Stop Playback", value: "stop" }
-    ])
     action: string = "melody"
     
     private controller: PromptDJController | null = null

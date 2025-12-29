@@ -12,6 +12,8 @@ import NativeLogger from "SpectaclesInteractionKit.lspkg/Utils/NativeLogger"
 import {validate} from "SpectaclesInteractionKit.lspkg/Utils/validate"
 import Event from "SpectaclesInteractionKit.lspkg/Utils/Event"
 
+declare const HapticFeedbackType: { Success: any };
+
 const TAG = "PromptDJ"
 const log = new NativeLogger(TAG)
 
@@ -309,7 +311,7 @@ export class PromptDJController extends BaseScriptComponent {
                 this.autoTestDelayEvent.reset(3.0)
             }
             
-            this.socket.onmessage = async (event: MessageEvent) => {
+            this.socket.onmessage = async (event: any) => {
                 let data: any
                 
                 if (event.data instanceof Blob) {
@@ -322,7 +324,7 @@ export class PromptDJController extends BaseScriptComponent {
                 this.handleMessage(data)
             }
             
-            this.socket.onclose = (event: CloseEvent) => {
+            this.socket.onclose = (event: any) => {
                 this.isConnected = false
                 
                 if (event.wasClean) {
