@@ -680,13 +680,17 @@ def wav_to_mp3(wav_path: str) -> str:
 def generate_audio_from_midi(midi_path: str, format: str = "wav") -> tuple:
     """
     Generate audio file from MIDI and return (file_path, url).
+    For Spectacles, use format="mp3" for better compatibility.
     """
     wav_path = render_midi_to_wav(midi_path)
     
     if format == "mp3":
         audio_path = wav_to_mp3(wav_path)
-        # Optionally remove WAV after MP3 conversion
-        # os.unlink(wav_path)
+        # Clean up WAV file after MP3 conversion to save space
+        try:
+            os.unlink(wav_path)
+        except:
+            pass  # Ignore if already deleted
     else:
         audio_path = wav_path
     
@@ -797,8 +801,9 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                     midi_path = generate_melody_midi(req)
                     
                     # Render to audio
-                    await manager.send_json(websocket, {"type": "status", "message": "Rendering audio..."})
-                    audio_path, audio_url = generate_audio_from_midi(midi_path, format="wav")
+                await manager.send_json(websocket, {"type": "status", "message": "Rendering audio..."})
+                # Use MP3 for Spectacles (better compatibility than WAV)
+                audio_path, audio_url = generate_audio_from_midi(midi_path, format="mp3")
                     
                     # Get file size
                     audio_size = os.path.getsize(audio_path)
@@ -809,7 +814,7 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                     # Send audio URL to Lens Studio
                     await manager.send_json(websocket, {
                         "type": "audio_ready",
-                        "format": "wav",
+                        "format": "mp3",
                         "url": audio_url,
                         "size_bytes": audio_size,
                         "params": {
@@ -841,8 +846,9 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                     midi_path = generate_drums_midi(req)
                     
                     # Render to audio
-                    await manager.send_json(websocket, {"type": "status", "message": "Rendering audio..."})
-                    audio_path, audio_url = generate_audio_from_midi(midi_path, format="wav")
+                await manager.send_json(websocket, {"type": "status", "message": "Rendering audio..."})
+                # Use MP3 for Spectacles (better compatibility than WAV)
+                audio_path, audio_url = generate_audio_from_midi(midi_path, format="mp3")
                     
                     # Get file size
                     audio_size = os.path.getsize(audio_path)
@@ -853,7 +859,7 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                     # Send audio URL to Lens Studio
                     await manager.send_json(websocket, {
                         "type": "audio_ready",
-                        "format": "wav",
+                        "format": "mp3",
                         "url": audio_url,
                         "size_bytes": audio_size,
                         "params": {
@@ -889,7 +895,8 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                     # Generate melody
                     melody_midi_path = generate_melody_midi(melody_req)
                     await manager.send_json(websocket, {"type": "status", "message": "Rendering melody audio..."})
-                    melody_audio_path, melody_url = generate_audio_from_midi(melody_midi_path, format="wav")
+                    # Use MP3 for Spectacles (better compatibility)
+                    melody_audio_path, melody_url = generate_audio_from_midi(melody_midi_path, format="mp3")
                     melody_size = os.path.getsize(melody_audio_path)
                     os.unlink(melody_midi_path)
                     
@@ -897,7 +904,8 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                     await manager.send_json(websocket, {"type": "status", "message": "Generating drums..."})
                     drums_midi_path = generate_drums_midi(drums_req)
                     await manager.send_json(websocket, {"type": "status", "message": "Rendering drums audio..."})
-                    drums_audio_path, drums_url = generate_audio_from_midi(drums_midi_path, format="wav")
+                    # Use MP3 for Spectacles (better compatibility)
+                    drums_audio_path, drums_url = generate_audio_from_midi(drums_midi_path, format="mp3")
                     drums_size = os.path.getsize(drums_audio_path)
                     os.unlink(drums_midi_path)
                     
