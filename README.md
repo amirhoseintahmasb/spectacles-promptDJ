@@ -1,6 +1,7 @@
 # 🎵 PromptDJ
 
 **AI-Powered Music Generation Service for Snap Spectacles**
+
 <img width="1302" height="811" alt="image" src="https://github.com/user-attachments/assets/f91d5e3e-13f7-4e99-ba84-9eb6843e6887" />
 
 PromptDJ is a real-time music generation backend that creates melodies and drum patterns using algorithmic composition, renders them to audio using FluidSynth, and streams to Snap Spectacles via WebSocket.
