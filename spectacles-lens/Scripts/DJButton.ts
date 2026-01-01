@@ -8,16 +8,22 @@
  * 1. Add to a SceneObject with Interactable
  * 2. Set the genre
  * 3. Connect the UI controller
+ * 
+ * NOTE: Uses global reference to avoid circular import issues.
  */
 
 import {Interactable} from "SpectaclesInteractionKit.lspkg/Components/Interaction/Interactable/Interactable"
 import NativeLogger from "SpectaclesInteractionKit.lspkg/Utils/NativeLogger"
 import Event from "SpectaclesInteractionKit.lspkg/Utils/Event"
-import {PromptDJUI} from "./PromptDJUI"
+
+// Interface for UI controller (avoids circular imports)
+interface PromptDJUIInterface {
+    selectGenre(genreId: string): void
+}
 
 // Declare global for accessing UI controller
 declare const global: {
-    promptDJUI?: PromptDJUI
+    promptDJUI?: PromptDJUIInterface
 }
 
 const TAG = "DJButton"
@@ -46,7 +52,7 @@ export class DJButton extends BaseScriptComponent {
     // STATE
     // ========================================
     
-    private ui: PromptDJUI | null = null
+    private ui: PromptDJUIInterface | null = null
     private interactable: Interactable | null = null
     
     // ========================================
@@ -72,28 +78,18 @@ export class DJButton extends BaseScriptComponent {
     }
     
     /**
-     * Find UI controller using multiple methods.
+     * Find UI controller from global reference.
+     * PromptDJUI registers itself globally in onAwake().
      */
     private findUIController(): void {
-        // Method 1: From linked SceneObject
-        if (this.uiController) {
-            const typeName = PromptDJUI.getTypeName()
-            this.ui = this.uiController.getComponent(typeName) as PromptDJUI | null
-            
-            if (this.ui) {
-                log.d("Found UI controller from linked SceneObject")
-                return
-            }
-        }
-        
-        // Method 2: From global
+        // Get from global (controller registers itself there)
         if (global.promptDJUI) {
             this.ui = global.promptDJUI
             log.d("Found UI controller from global.promptDJUI")
             return
         }
         
-        log.w("UI controller not found")
+        log.w("UI controller not found - waiting for it to initialize")
     }
     
     private setupInteractable(): void {

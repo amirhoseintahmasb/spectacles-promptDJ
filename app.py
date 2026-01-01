@@ -751,15 +751,72 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
     
     try:
         while True:
-            # Receive message from Spectacles
+            # Receive message from Spectacles (handle both text and binary)
             try:
-                data = await websocket.receive_json()
-            except Exception as e:
-                print(f"Error receiving JSON from {client_id}: {e}")
+                message = await websocket.receive()
+                
+                # Handle different message types
+                if "text" in message:
+                    raw_text = message["text"]
+                elif "bytes" in message:
+                    raw_text = message["bytes"].decode("utf-8")
+                else:
+                    print(f"Unknown message type from {client_id}: {message}")
+                    continue
+                
+                # Clean the text (remove any trailing garbage and null bytes)
+                raw_text = raw_text.strip().rstrip('\x00')
+                
+                # Handle potential concatenated JSON objects - find first complete object
+                # Look for the end of the first JSON object
+                brace_count = 0
+                end_pos = 0
+                in_string = False
+                escape_next = False
+                
+                for i, char in enumerate(raw_text):
+                    if escape_next:
+                        escape_next = False
+                        continue
+                    if char == '\\' and in_string:
+                        escape_next = True
+                        continue
+                    if char == '"' and not escape_next:
+                        in_string = not in_string
+                        continue
+                    if not in_string:
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                end_pos = i + 1
+                                break
+                
+                # Extract just the first JSON object
+                if end_pos > 0:
+                    json_text = raw_text[:end_pos]
+                else:
+                    json_text = raw_text
+                
+                # Parse JSON
+                data = json.loads(json_text)
+                
+            except json.JSONDecodeError as e:
+                print(f"JSON decode error from {client_id}: {e}")
+                print(f"Raw message (first 300 chars): {raw_text[:300] if 'raw_text' in dir() else 'N/A'}")
                 await manager.send_json(websocket, {
                     "type": "error",
-                    "message": f"Invalid message format: {str(e)}",
+                    "message": f"Invalid JSON: {str(e)}",
                     "code": "parse_error"
+                })
+                continue
+            except Exception as e:
+                print(f"Error receiving message from {client_id}: {e}")
+                await manager.send_json(websocket, {
+                    "type": "error",
+                    "message": f"Message error: {str(e)}",
+                    "code": "receive_error"
                 })
                 continue
             

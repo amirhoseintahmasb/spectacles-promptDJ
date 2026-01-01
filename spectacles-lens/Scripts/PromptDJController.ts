@@ -326,6 +326,9 @@ export class PromptDJController extends BaseScriptComponent {
             }
         })
         
+        // Create audio play delay event (for stable playback)
+        this.audioPlayDelayEvent = this.createEvent("DelayedCallbackEvent") as DelayedCallbackEvent
+        
         // Setup on start
         this.createEvent("OnStartEvent").bind(() => {
             this.onStart()
@@ -348,6 +351,9 @@ export class PromptDJController extends BaseScriptComponent {
         
         // Setup button callbacks
         this.setupButtonCallbacks()
+        
+        // Update UI with initial values
+        this.updateUI()
         
         // Connect after delay
         validate(this.connectDelayEvent)
@@ -549,15 +555,15 @@ export class PromptDJController extends BaseScriptComponent {
             this.socket.onmessage = async (event: WebSocketMessageEvent) => {
                 try {
                     let data: WebSocketMessage
-                    
-                    if (event.data instanceof Blob) {
-                        const text = await event.data.text()
+                
+                if (event.data instanceof Blob) {
+                    const text = await event.data.text()
                         data = JSON.parse(text) as WebSocketMessage
-                    } else {
+                } else {
                         data = JSON.parse(event.data as string) as WebSocketMessage
-                    }
-                    
-                    this.handleMessage(data)
+                }
+                
+                this.handleMessage(data)
                 } catch (e) {
                     log.e("Error parsing WebSocket message: " + e)
                     log.e("Raw data: " + (event.data instanceof Blob ? "[Blob]" : event.data))
@@ -599,7 +605,7 @@ export class PromptDJController extends BaseScriptComponent {
                 
                 // Auto-reconnect only if not a clean close
                 if (!event.wasClean) {
-                    validate(this.reconnectDelayEvent)
+                validate(this.reconnectDelayEvent)
                     this.reconnectDelayEvent!.reset(3.0)
                 }
             }
@@ -804,7 +810,7 @@ export class PromptDJController extends BaseScriptComponent {
      * Called when audio track is successfully loaded.
      */
     private onAudioLoaded(audioTrack: AudioTrackAsset): void {
-        log.i("Audio loaded successfully!")
+                    log.i("Audio loaded successfully!")
         
         // Validate audio track
         if (!audioTrack) {
@@ -950,7 +956,7 @@ export class PromptDJController extends BaseScriptComponent {
      * Called when audio loading fails.
      */
     private onAudioLoadError(error: string): void {
-        log.e("Failed to load audio: " + error)
+                    log.e("Failed to load audio: " + error)
         log.e("Attempt " + this.audioLoadAttempts + " of " + this.MAX_AUDIO_LOAD_ATTEMPTS)
         
         // Common error causes on Spectacles:
@@ -963,7 +969,7 @@ export class PromptDJController extends BaseScriptComponent {
             this.updateStatusText("Retrying audio...")
             this.scheduleAudioRetry()
         } else {
-            this.updateStatusText("Audio load failed")
+                    this.updateStatusText("Audio load failed")
             this.onAudioErrorEvent.invoke("Failed after " + this.MAX_AUDIO_LOAD_ATTEMPTS + " attempts: " + error)
         }
     }
@@ -1041,7 +1047,7 @@ export class PromptDJController extends BaseScriptComponent {
     public stopPlayback(): void {
         if (this.audioPlayer && this.isPlaying) {
             try {
-                this.audioPlayer.stop(true)
+            this.audioPlayer.stop(true)
             } catch (e) {
                 log.w("Error stopping audio: " + e)
             }
@@ -1083,6 +1089,14 @@ export class PromptDJController extends BaseScriptComponent {
     /** Cycle to next drum style */
     public nextDrumStyle(): void {
         this.currentDrumStyleIndex = (this.currentDrumStyleIndex + 1) % this.drumStyles.length
+        this.params.drum_style = this.drumStyles[this.currentDrumStyleIndex]
+        this.updateUI()
+        this.syncParams()
+    }
+    
+    /** Cycle to previous drum style */
+    public previousDrumStyle(): void {
+        this.currentDrumStyleIndex = (this.currentDrumStyleIndex - 1 + this.drumStyles.length) % this.drumStyles.length
         this.params.drum_style = this.drumStyles[this.currentDrumStyleIndex]
         this.updateUI()
         this.syncParams()

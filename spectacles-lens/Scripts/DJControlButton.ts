@@ -10,18 +10,43 @@
  * - next: Next genre
  * - previous: Previous genre
  * - regenerate: Regenerate current genre
+ * 
+ * NOTE: Uses global references to avoid circular import issues.
  */
 
 import {Interactable} from "SpectaclesInteractionKit.lspkg/Components/Interaction/Interactable/Interactable"
 import NativeLogger from "SpectaclesInteractionKit.lspkg/Utils/NativeLogger"
 import Event from "SpectaclesInteractionKit.lspkg/Utils/Event"
-import {PromptDJUI} from "./PromptDJUI"
-import {PromptDJController} from "./PromptDJController"
+
+// Interfaces for controllers (avoids circular imports)
+interface PromptDJUIInterface {
+    playGenre(genreId: string): void
+    random(): void
+    stop(): void
+    next(): void
+    previous(): void
+    regenerate(): void
+    increaseBPM(): void
+    decreaseBPM(): void
+}
+
+interface PromptDJControllerInterface {
+    stopPlayback(): void
+    generateBoth(): void
+    generateDrums(): void
+    generateMelody(): void
+    increaseTempo(): void
+    decreaseTempo(): void
+    nextScale(): void
+    previousScale(): void
+    nextDrumStyle(): void
+    previousDrumStyle(): void
+}
 
 // Declare global for accessing controllers
 declare const global: {
-    promptDJUI?: PromptDJUI
-    promptDJController?: PromptDJController
+    promptDJUI?: PromptDJUIInterface
+    promptDJController?: PromptDJControllerInterface
 }
 
 const TAG = "DJControlButton"
@@ -37,6 +62,12 @@ type ControlAction =
     | "regenerate"
     | "bpmUp"
     | "bpmDown"
+    | "nextScale"
+    | "prevScale"
+    | "nextDrum"
+    | "prevDrum"
+    | "drums"
+    | "melody"
 
 /**
  * Control button for DJ interface.
@@ -61,8 +92,8 @@ export class DJControlButton extends BaseScriptComponent {
     // STATE
     // ========================================
     
-    private ui: PromptDJUI | null = null
-    private controller: PromptDJController | null = null
+    private ui: PromptDJUIInterface | null = null
+    private controller: PromptDJControllerInterface | null = null
     private interactable: Interactable | null = null
     
     // ========================================
@@ -88,22 +119,12 @@ export class DJControlButton extends BaseScriptComponent {
     }
     
     /**
-     * Find UI and main controller using multiple methods.
+     * Find UI and main controller from global references.
+     * Controllers register themselves globally in onAwake().
      */
     private findControllers(): void {
-        // From linked SceneObject
-        if (this.uiController) {
-            // Try to find PromptDJUI
-            const uiTypeName = PromptDJUI.getTypeName()
-            this.ui = this.uiController.getComponent(uiTypeName) as PromptDJUI | null
-            
-            // Try to find PromptDJController
-            const controllerTypeName = PromptDJController.getTypeName()
-            this.controller = this.uiController.getComponent(controllerTypeName) as PromptDJController | null
-        }
-        
-        // From global
-        if (!this.ui && global.promptDJUI) {
+        // Get from global (controllers register themselves there)
+        if (global.promptDJUI) {
             this.ui = global.promptDJUI
         }
         
@@ -213,6 +234,54 @@ export class DJControlButton extends BaseScriptComponent {
                     this.ui.decreaseBPM()
                 } else if (this.controller) {
                     this.controller.decreaseTempo()
+                } else {
+                    log.e("No controller found for action: " + this.action)
+                }
+                break
+                
+            case "nextScale":
+                if (this.controller) {
+                    this.controller.nextScale()
+                } else {
+                    log.e("No controller found for action: " + this.action)
+                }
+                break
+                
+            case "prevScale":
+                if (this.controller) {
+                    this.controller.previousScale()
+                } else {
+                    log.e("No controller found for action: " + this.action)
+                }
+                break
+                
+            case "nextDrum":
+                if (this.controller) {
+                    this.controller.nextDrumStyle()
+                } else {
+                    log.e("No controller found for action: " + this.action)
+                }
+                break
+                
+            case "prevDrum":
+                if (this.controller) {
+                    this.controller.previousDrumStyle()
+                } else {
+                    log.e("No controller found for action: " + this.action)
+                }
+                break
+                
+            case "drums":
+                if (this.controller) {
+                    this.controller.generateDrums()
+                } else {
+                    log.e("No controller found for action: " + this.action)
+                }
+                break
+                
+            case "melody":
+                if (this.controller) {
+                    this.controller.generateMelody()
                 } else {
                     log.e("No controller found for action: " + this.action)
                 }

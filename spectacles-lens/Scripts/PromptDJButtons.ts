@@ -3,17 +3,31 @@
  * =======================
  * Attach to UI buttons to trigger PromptDJ actions.
  * Follows SIK PinchButton pattern.
+ * 
+ * NOTE: Uses global reference to avoid circular import issues.
  */
 
 import {Interactable} from "SpectaclesInteractionKit.lspkg/Components/Interaction/Interactable/Interactable"
 import NativeLogger from "SpectaclesInteractionKit.lspkg/Utils/NativeLogger"
-import {validate} from "SpectaclesInteractionKit.lspkg/Utils/validate"
 import Event from "SpectaclesInteractionKit.lspkg/Utils/Event"
-import {PromptDJController} from "./PromptDJController"
+
+// Interface for controller methods we need
+interface PromptDJControllerInterface {
+    generateMelody(): void
+    generateDrums(): void
+    generateBoth(): void
+    increaseTempo(): void
+    decreaseTempo(): void
+    nextScale(): void
+    previousScale(): void
+    nextDrumStyle(): void
+    stopPlayback(): void
+    ping(): void
+}
 
 // Declare global for accessing controller
 declare const global: {
-    promptDJController?: PromptDJController
+    promptDJController?: PromptDJControllerInterface
 }
 
 const TAG = "PromptDJButton"
@@ -47,7 +61,7 @@ export class PromptDJButton extends BaseScriptComponent {
     @hint("Action to perform when button is pressed")
     action: string = "melody"
     
-    private controller: PromptDJController | null = null
+    private controller: PromptDJControllerInterface | null = null
     private interactable: Interactable | null = null
     
     // Public event for external listeners
@@ -75,30 +89,18 @@ export class PromptDJButton extends BaseScriptComponent {
     }
     
     /**
-     * Find the controller using multiple methods:
-     * 1. From linked SceneObject input
-     * 2. From global.promptDJController
+     * Find the controller from global reference.
+     * The controller registers itself globally in onAwake().
      */
     private findController(): void {
-        // Method 1: Try from linked SceneObject
-        if (this.controllerObject) {
-            const typeName = PromptDJController.getTypeName()
-            this.controller = this.controllerObject.getComponent(typeName) as PromptDJController | null
-            
-            if (this.controller) {
-                log.d("Found controller from linked SceneObject")
-                return
-            }
-        }
-        
-        // Method 2: Try from global
+        // Get from global (controller registers itself there)
         if (global.promptDJController) {
             this.controller = global.promptDJController
             log.d("Found controller from global.promptDJController")
             return
         }
         
-        log.w("Controller not found via SceneObject or global")
+        log.w("Controller not found - waiting for it to initialize")
     }
     
     private setupInteractable(): void {

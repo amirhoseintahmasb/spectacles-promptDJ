@@ -9,15 +9,44 @@
  * - Play/Stop controls
  * - Tempo slider
  * - Status display
+ * 
+ * NOTE: Uses global references to avoid circular import issues.
  */
 
 import NativeLogger from "SpectaclesInteractionKit.lspkg/Utils/NativeLogger"
 import Event from "SpectaclesInteractionKit.lspkg/Utils/Event"
-import {PromptDJController, MusicParams} from "./PromptDJController"
+
+// Music parameters interface (matches PromptDJController.MusicParams)
+interface MusicParams {
+    tempo_bpm: number
+    scale: string
+    density: number
+    variation: number
+    drum_style: string
+    swing: number
+    bars: number
+}
+
+// Interface for controller (avoids circular imports)
+interface PromptDJControllerInterface {
+    params: MusicParams
+    generateBoth(): void
+    generateMelody(): void
+    generateDrums(): void
+    stopPlayback(): void
+    increaseTempo(): void
+    decreaseTempo(): void
+    nextScale(): void
+    previousScale(): void
+    nextDrumStyle(): void
+    ping(): void
+    readonly onStatusChange: { add: (callback: (status: string) => void) => void }
+    readonly onAudioPlaying: { add: (callback: () => void) => void }
+}
 
 // Declare global for accessing controller
 declare const global: {
-    promptDJController?: PromptDJController
+    promptDJController?: PromptDJControllerInterface
     promptDJUI?: PromptDJUI
 }
 
@@ -87,7 +116,7 @@ export class PromptDJUI extends BaseScriptComponent {
     // STATE
     // ========================================
     
-    private controller: PromptDJController | null = null
+    private controller: PromptDJControllerInterface | null = null
     private currentGenre: Genre | null = null
     private isPlaying: boolean = false
     
@@ -133,28 +162,18 @@ export class PromptDJUI extends BaseScriptComponent {
     }
     
     /**
-     * Find the controller using multiple methods.
+     * Find the controller from global reference.
+     * PromptDJController registers itself globally in onAwake().
      */
     private findController(): void {
-        // Method 1: From linked SceneObject
-        if (this.controllerObject) {
-            const typeName = PromptDJController.getTypeName()
-            this.controller = this.controllerObject.getComponent(typeName) as PromptDJController | null
-            
-            if (this.controller) {
-                log.d("Found controller from linked SceneObject")
-                return
-            }
-        }
-        
-        // Method 2: From global
+        // Get from global (controller registers itself there)
         if (global.promptDJController) {
             this.controller = global.promptDJController
             log.d("Found controller from global.promptDJController")
             return
         }
         
-        log.w("Controller not found via SceneObject or global")
+        log.w("Controller not found - waiting for it to initialize")
     }
     
     // ========================================
