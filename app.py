@@ -47,7 +47,7 @@ SF2_PATH = SF2_DIR / "MuseScore_General.sf2"
 # Server URL - use 127.0.0.1 for Lens Studio Preview, network IP for real Spectacles
 # Set HOST_IP environment variable to override (e.g., export HOST_IP=172.20.10.3)
 import os
-HOST_IP = os.getenv("HOST_IP", "127.0.0.1")  # Default to localhost for local testing
+HOST_IP = os.getenv("HOST_IP", "172.20.10.4")  # Default to localhost for local testing
 HOST_URL = f"http://{HOST_IP}:8123"
 
 # Mount static files
@@ -677,6 +677,121 @@ def wav_to_mp3(wav_path: str) -> str:
         raise RuntimeError(f"FFmpeg conversion failed: {e.stderr}")
 
 
+def wav_to_pcm16_base64(wav_path: str, target_sample_rate: int = 48000) -> tuple:
+    """
+    Convert WAV to PCM16 mono audio and return as base64.
+    
+    For Spectacles DynamicAudioOutput which requires:
+    - PCM 16-bit signed little-endian
+    - 48000 Hz sample rate
+    - Mono channel
+    
+    Returns: (base64_string, sample_count, channels)
+    """
+    pcm_path = Path(wav_path).with_suffix(".pcm")
+    
+    try:
+        # Convert to PCM16 mono at 48kHz using FFmpeg
+        subprocess.run([
+            "ffmpeg",
+            "-y",                      # Overwrite output
+            "-i", wav_path,            # Input WAV
+            "-ar", str(target_sample_rate),  # Sample rate 48kHz
+            "-ac", "1",                # Mono channel
+            "-f", "s16le",             # PCM 16-bit signed little-endian
+            "-acodec", "pcm_s16le",    # PCM codec
+            str(pcm_path)
+        ], check=True, capture_output=True, text=True, timeout=60)
+        
+        # Read PCM data and convert to base64
+        with open(pcm_path, "rb") as f:
+            pcm_data = f.read()
+        
+        # Calculate sample count (2 bytes per sample for 16-bit)
+        sample_count = len(pcm_data) // 2
+        
+        # Encode as base64
+        pcm_base64 = base64.b64encode(pcm_data).decode('utf-8')
+        
+        # Clean up temp file
+        os.unlink(pcm_path)
+        
+        print(f"PCM16 conversion: {len(pcm_data)} bytes, {sample_count} samples @ {target_sample_rate}Hz")
+        
+        return pcm_base64, sample_count, 1  # 1 = mono
+        
+    except subprocess.CalledProcessError as e:
+        print(f"FFmpeg PCM error: {e.stderr}")
+        raise RuntimeError(f"FFmpeg PCM conversion failed: {e.stderr}")
+
+
+def generate_audio_pcm16_from_midi(midi_path: str, sample_rate: int = 48000) -> dict:
+    """
+    Generate PCM16 audio from MIDI for Spectacles DynamicAudioOutput.
+    
+    Returns dict with:
+    - audio_base64: base64-encoded PCM16 data
+    - sample_rate: 48000
+    - channels: 1 (mono)
+    - sample_count: number of samples
+    """
+    # First render to WAV at target sample rate
+    wav_path = render_midi_to_wav_48k(midi_path, sample_rate)
+    
+    # Convert to PCM16 base64
+    pcm_base64, sample_count, channels = wav_to_pcm16_base64(wav_path, sample_rate)
+    
+    # Clean up WAV
+    try:
+        os.unlink(wav_path)
+    except:
+        pass
+    
+    return {
+        "audio_base64": pcm_base64,
+        "sample_rate": sample_rate,
+        "channels": channels,
+        "sample_count": sample_count
+    }
+
+
+def render_midi_to_wav_48k(midi_path: str, sample_rate: int = 48000) -> str:
+    """
+    Render MIDI to WAV at 48kHz for Spectacles compatibility.
+    """
+    if not SF2_PATH.exists():
+        raise RuntimeError(f"SoundFont not found: {SF2_PATH}")
+    
+    if not Path(midi_path).exists():
+        raise RuntimeError(f"MIDI file not found: {midi_path}")
+    
+    out_name = f"track_{uuid.uuid4().hex}_48k.wav"
+    wav_path = OUT_DIR / out_name
+    
+    cmd = [
+        "fluidsynth",
+        "-ni",
+        "-F", str(wav_path),
+        "-r", str(sample_rate),  # 48kHz for Spectacles
+        str(SF2_PATH.absolute()),
+        str(Path(midi_path).absolute()),
+    ]
+    
+    print(f"FluidSynth (48kHz) command: {' '.join(cmd)}")
+    
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        
+        if not wav_path.exists():
+            raise RuntimeError(f"FluidSynth did not create output file")
+        
+        print(f"FluidSynth rendered @ 48kHz: {wav_path} ({wav_path.stat().st_size} bytes)")
+        return str(wav_path)
+        
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("FluidSynth rendering timed out")
+
+
 def generate_audio_from_midi(midi_path: str, format: str = "wav") -> tuple:
     """
     Generate audio file from MIDI and return (file_path, url).
@@ -857,23 +972,21 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                     # Generate MIDI file
                     midi_path = generate_melody_midi(req)
                     
-                    # Render to audio
+                    # Render to PCM16 audio for Spectacles DynamicAudioOutput
                     await manager.send_json(websocket, {"type": "status", "message": "Rendering audio..."})
-                    # Use MP3 for Spectacles (better compatibility than WAV)
-                    audio_path, audio_url = generate_audio_from_midi(midi_path, format="mp3")
-                    
-                    # Get file size
-                    audio_size = os.path.getsize(audio_path)
+                    pcm_data = generate_audio_pcm16_from_midi(midi_path, sample_rate=48000)
                     
                     # Clean up MIDI file
                     os.unlink(midi_path)
                     
-                    # Send audio URL to Lens Studio
+                    # Send PCM16 audio data directly (for DynamicAudioOutput)
                     await manager.send_json(websocket, {
                         "type": "audio_ready",
-                        "format": "mp3",
-                        "url": audio_url,
-                        "size_bytes": audio_size,
+                        "format": "pcm16",
+                        "audio_base64": pcm_data["audio_base64"],
+                        "sample_rate": pcm_data["sample_rate"],
+                        "channels": pcm_data["channels"],
+                        "sample_count": pcm_data["sample_count"],
                         "params": {
                             "tempo_bpm": req.tempo_bpm,
                             "bars": req.bars,
@@ -882,8 +995,11 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                             "variation": req.variation
                         }
                     })
+                    print(f"Sent PCM16 audio: {pcm_data['sample_count']} samples @ {pcm_data['sample_rate']}Hz")
                 except Exception as e:
                     print(f"Error generating melody: {e}")
+                    import traceback
+                    traceback.print_exc()
                     await manager.send_json(websocket, {"type": "error", "message": str(e)})
             
             elif action == "generate_drums":
@@ -902,23 +1018,21 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                     # Generate MIDI file
                     midi_path = generate_drums_midi(req)
                     
-                    # Render to audio
+                    # Render to PCM16 audio for Spectacles DynamicAudioOutput
                     await manager.send_json(websocket, {"type": "status", "message": "Rendering audio..."})
-                    # Use MP3 for Spectacles (better compatibility than WAV)
-                    audio_path, audio_url = generate_audio_from_midi(midi_path, format="mp3")
-                    
-                    # Get file size
-                    audio_size = os.path.getsize(audio_path)
+                    pcm_data = generate_audio_pcm16_from_midi(midi_path, sample_rate=48000)
                     
                     # Clean up MIDI file
                     os.unlink(midi_path)
                     
-                    # Send audio URL to Lens Studio
+                    # Send PCM16 audio data directly (for DynamicAudioOutput)
                     await manager.send_json(websocket, {
                         "type": "audio_ready",
-                        "format": "mp3",
-                        "url": audio_url,
-                        "size_bytes": audio_size,
+                        "format": "pcm16",
+                        "audio_base64": pcm_data["audio_base64"],
+                        "sample_rate": pcm_data["sample_rate"],
+                        "channels": pcm_data["channels"],
+                        "sample_count": pcm_data["sample_count"],
                         "params": {
                             "tempo_bpm": req.tempo_bpm,
                             "bars": req.bars,
@@ -926,8 +1040,11 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                             "swing": req.swing
                         }
                     })
+                    print(f"Sent PCM16 drums: {pcm_data['sample_count']} samples @ {pcm_data['sample_rate']}Hz")
                 except Exception as e:
                     print(f"Error generating drums: {e}")
+                    import traceback
+                    traceback.print_exc()
                     await manager.send_json(websocket, {"type": "error", "message": str(e)})
             
             elif action == "generate_both":
@@ -949,35 +1066,28 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                 await manager.send_json(websocket, {"type": "status", "message": "Generating melody..."})
                 
                 try:
-                    # Generate melody
+                    # Generate melody PCM16
                     melody_midi_path = generate_melody_midi(melody_req)
                     await manager.send_json(websocket, {"type": "status", "message": "Rendering melody audio..."})
-                    # Use MP3 for Spectacles (better compatibility)
-                    melody_audio_path, melody_url = generate_audio_from_midi(melody_midi_path, format="mp3")
-                    melody_size = os.path.getsize(melody_audio_path)
+                    melody_pcm = generate_audio_pcm16_from_midi(melody_midi_path, sample_rate=48000)
                     os.unlink(melody_midi_path)
                     
-                    # Generate drums
+                    # Generate drums PCM16
                     await manager.send_json(websocket, {"type": "status", "message": "Generating drums..."})
                     drums_midi_path = generate_drums_midi(drums_req)
                     await manager.send_json(websocket, {"type": "status", "message": "Rendering drums audio..."})
-                    # Use MP3 for Spectacles (better compatibility)
-                    drums_audio_path, drums_url = generate_audio_from_midi(drums_midi_path, format="mp3")
-                    drums_size = os.path.getsize(drums_audio_path)
+                    drums_pcm = generate_audio_pcm16_from_midi(drums_midi_path, sample_rate=48000)
                     os.unlink(drums_midi_path)
                     
-                    # Send both audio URLs
+                    # Send melody first (for now - could mix them later)
                     await manager.send_json(websocket, {
                         "type": "audio_ready",
-                        "format": "both",
-                        "melody": {
-                            "url": melody_url,
-                            "size_bytes": melody_size
-                        },
-                        "drums": {
-                            "url": drums_url,
-                            "size_bytes": drums_size
-                        },
+                        "format": "pcm16",
+                        "audio_base64": melody_pcm["audio_base64"],
+                        "sample_rate": melody_pcm["sample_rate"],
+                        "channels": melody_pcm["channels"],
+                        "sample_count": melody_pcm["sample_count"],
+                        "has_drums": True,
                         "params": {
                             "tempo_bpm": melody_req.tempo_bpm,
                             "bars": melody_req.bars,
@@ -985,8 +1095,15 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                             "drum_style": drums_req.style
                         }
                     })
+                    print(f"Sent PCM16 melody: {melody_pcm['sample_count']} samples")
+                    
+                    # Note: For now we just send melody. 
+                    # Future: Could mix melody + drums into single PCM stream
+                    
                 except Exception as e:
                     print(f"Error generating both: {e}")
+                    import traceback
+                    traceback.print_exc()
                     await manager.send_json(websocket, {"type": "error", "message": str(e)})
             
             else:

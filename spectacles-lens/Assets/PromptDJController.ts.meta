@@ -1,0 +1,89 @@
+- !<AssetImportMetadata/ef368ff8-663c-4ff6-8b75-2c14a8d9bb2b>
+  ImportedAssetIds:
+    TypeScriptAsset: !<reference> 6dae16ad-0a12-4cdb-b4d8-438b5acaa16f
+  ImporterName: TypeScriptAssetImporter
+  PrimaryAsset: !<reference> 6dae16ad-0a12-4cdb-b4d8-438b5acaa16f
+  PackageType: NotAPackage
+  LegacyPackagePolicy: ~
+  ExtraData:
+    {}
+  AssetDataMap:
+    TypeScriptAsset: !<own> 8e050692-4e6c-4cb1-b873-ced11afd4ee7
+  DependentFiles:
+    []
+  ImporterSettings: !<AssetImporterSettings>
+    {}
+  CompressionSettings: !<own> 00000000-0000-0000-0000-000000000000
+- !<TypeScriptAssetData/8e050692-4e6c-4cb1-b873-ced11afd4ee7>
+  SvgIcon: ""
+  SetupScript:
+    code: ""
+  Description: ""
+  VersionMajor: 0
+  VersionMinor: 0
+  VersionPatch: 0
+  ComponentUid: d03f90b0-2d81-4dc5-9175-bab2272be6b7
+  ExportUid: 00000000-0000-0000-0000-000000000000
+  PackagePolicy: CanBeUnpacked
+  ScriptInputsHidden:
+    audioPlayer: false
+    backendUrl: false
+    drumStyleText: false
+    generateBothButton: false
+    generateDrumsButton: false
+    generateMelodyButton: false
+    internetModule: false
+    nextDrumStyleButton: false
+    nextScaleButton: false
+    remoteMediaModule: false
+    scaleText: false
+    statusText: false
+    tempoDownButton: false
+    tempoText: false
+    tempoUpButton: false
+    useLowLatencyAudio: false
+  ScriptTypesHidden:
+    {}
+  ReadMe: !<reference> 00000000-0000-0000-0000-000000000000
+  DeclarationFile: !<reference> 00000000-0000-0000-0000-000000000000
+  Tags:
+    []
+  Attachments:
+    []
+  DefaultScriptInputs:
+    - internetModule: !<reference.InternetModule> 00000000-0000-0000-0000-000000000000
+      remoteMediaModule: !<reference.RemoteMediaModule> 00000000-0000-0000-0000-000000000000
+      backendUrl: "ws://127.0.0.1:8123/ws/spectacles/"
+      audioPlayer: !<reference.AudioComponent> 00000000-0000-0000-0000-000000000000
+      useLowLatencyAudio: true
+      statusText: !<reference.Text> 00000000-0000-0000-0000-000000000000
+      tempoText: !<reference.Text> 00000000-0000-0000-0000-000000000000
+      scaleText: !<reference.Text> 00000000-0000-0000-0000-000000000000
+      drumStyleText: !<reference.Text> 00000000-0000-0000-0000-000000000000
+      generateMelodyButton: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
+      generateDrumsButton: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
+      generateBothButton: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
+      tempoUpButton: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
+      tempoDownButton: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
+      nextScaleButton: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
+      nextDrumStyleButton: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
+  ScriptTypes:
+    -
+      {}
+  InputLines:
+    - '// @input Asset.InternetModule internetModule {"hint":"Internet Module for WebSocket connection"}'
+    - '// @input Asset.RemoteMediaModule remoteMediaModule {"hint":"Remote Media Module for audio loading"}'
+    - '// @input string backendUrl = "ws://127.0.0.1:8123/ws/spectacles/" {"hint":"WebSocket backend URL (ws://IP:8123/ws/spectacles/) - Use 127.0.0.1 for Lens Studio Preview, network IP for real Spectacles. Must end with /"}'
+    - '// @input Component.AudioComponent audioPlayer {"hint":"Audio component for playback"}'
+    - '// @input bool useLowLatencyAudio = true {"hint":"Use Low Latency audio mode (recommended for button feedback)"}'
+    - '// @input Component.Text statusText {"hint":"Status text display"}'
+    - '// @input Component.Text tempoText {"hint":"Tempo text display"}'
+    - '// @input Component.Text scaleText {"hint":"Scale text display"}'
+    - '// @input Component.Text drumStyleText {"hint":"Drum style text display"}'
+    - '// @input SceneObject generateMelodyButton {"hint":"Generate Melody button"}'
+    - '// @input SceneObject generateDrumsButton {"hint":"Generate Drums button"}'
+    - '// @input SceneObject generateBothButton {"hint":"Generate Both button"}'
+    - '// @input SceneObject tempoUpButton {"hint":"Tempo Up button"}'
+    - '// @input SceneObject tempoDownButton {"hint":"Tempo Down button"}'
+    - '// @input SceneObject nextScaleButton {"hint":"Next Scale button"}'
+    - '// @input SceneObject nextDrumStyleButton {"hint":"Next Drum Style button"}'

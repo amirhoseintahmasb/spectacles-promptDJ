@@ -1,0 +1,53 @@
+- !<AssetImportMetadata/f7457a77-e270-4e37-888c-fe50ed6e67e4>
+  ImportedAssetIds:
+    TypeScriptAsset: !<reference> 1f392c6d-9868-45ca-8079-1856e2134231
+  ImporterName: TypeScriptAssetImporter
+  PrimaryAsset: !<reference> 1f392c6d-9868-45ca-8079-1856e2134231
+  PackageType: NotAPackage
+  LegacyPackagePolicy: ~
+  ExtraData:
+    {}
+  AssetDataMap:
+    TypeScriptAsset: !<own> 7db95034-959a-4047-9e5b-5d24ab4e102d
+  DependentFiles:
+    []
+  ImporterSettings: !<AssetImporterSettings>
+    {}
+  CompressionSettings: !<own> 00000000-0000-0000-0000-000000000000
+- !<TypeScriptAssetData/7db95034-959a-4047-9e5b-5d24ab4e102d>
+  SvgIcon: ""
+  SetupScript:
+    code: ""
+  Description: ""
+  VersionMajor: 0
+  VersionMinor: 0
+  VersionPatch: 0
+  ComponentUid: 31253a97-44df-41db-8e4b-d44bc15e449d
+  ExportUid: 00000000-0000-0000-0000-000000000000
+  PackagePolicy: CanBeUnpacked
+  ScriptInputsHidden:
+    controllerObject: false
+    nowPlayingText: false
+    statusText: false
+    uiContainer: false
+  ScriptTypesHidden:
+    {}
+  ReadMe: !<reference> 00000000-0000-0000-0000-000000000000
+  DeclarationFile: !<reference> 00000000-0000-0000-0000-000000000000
+  Tags:
+    []
+  Attachments:
+    []
+  DefaultScriptInputs:
+    - controllerObject: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
+      uiContainer: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
+      statusText: !<reference.Text> 00000000-0000-0000-0000-000000000000
+      nowPlayingText: !<reference.Text> 00000000-0000-0000-0000-000000000000
+  ScriptTypes:
+    -
+      {}
+  InputLines:
+    - '// @input SceneObject controllerObject {"hint":"PromptDJ Controller SceneObject"}'
+    - '// @input SceneObject uiContainer {"hint":"UI Container (Screen Transform)"}'
+    - '// @input Component.Text statusText {"hint":"Status Text display"}'
+    - '// @input Component.Text nowPlayingText {"hint":"Now Playing Text display"}'

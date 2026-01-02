@@ -1,0 +1,1316 @@
+/**
+ * PromptDJ Controller for Snap Spectacles
+ * ========================================
+ * AI Music Generation Controller using SIK best practices.
+ * Connects to PromptDJ backend via WebSocket and plays generated audio.
+ * 
+ * Based on Spectacles Interaction Kit patterns from RocketLaunchControl.
+ * 
+ * AUDIO PLAYBACK NOTES (from Snap documentation):
+ * - Spectacles support max 16 concurrent audio tracks
+ * - Use MP3 format, mono channel for best compatibility
+ * - Set playbackMode to LowLatency for immediate response
+ * - Keep audio under 15 seconds for optimal performance
+ */
+
+import {Interactable} from "SpectaclesInteractionKit.lspkg/Components/Interaction/Interactable/Interactable"
+import NativeLogger from "SpectaclesInteractionKit.lspkg/Utils/NativeLogger"
+import {validate} from "SpectaclesInteractionKit.lspkg/Utils/validate"
+import Event from "SpectaclesInteractionKit.lspkg/Utils/Event"
+import {DynamicAudioOutput} from "./DynamicAudioOutput"
+
+// Declare global types for Lens Studio
+declare const HapticFeedbackType: { Success: any }
+declare const Audio: {
+    PlaybackMode: {
+        LowLatency: number
+        LowPower: number
+    }
+}
+declare const global: {
+    promptDJController?: PromptDJController
+    HapticFeedbackSystem?: {
+        hapticFeedback: (type: any) => void
+    }
+}
+
+const TAG = "PromptDJ"
+const log = new NativeLogger(TAG)
+
+// ========================================
+// TYPE DEFINITIONS
+// ========================================
+
+/** WebSocket connected message */
+interface ConnectedMessage {
+    type: "connected"
+    state?: Partial<MusicParams>
+    available_scales?: string[]
+    available_drum_styles?: string[]
+}
+
+/** Audio ready message - now supports PCM16 base64 format */
+interface AudioReadyMessage {
+    type: "audio_ready"
+    format: string  // "pcm16" | "mp3" | "both"
+    // PCM16 format fields (for DynamicAudioOutput)
+    audio_base64?: string
+    sample_rate?: number
+    channels?: number
+    sample_count?: number
+    // Legacy MP3 format fields
+    url?: string
+    size_bytes?: number
+    melody?: { url: string; size_bytes: number }
+    drums?: { url: string; size_bytes: number }
+}
+
+/** Status message */
+interface StatusMessage {
+    type: "status"
+    message: string
+}
+
+/** Error message */
+interface ErrorMessage {
+    type: "error"
+    message: string
+}
+
+/** Params updated message */
+interface ParamsUpdatedMessage {
+    type: "params_updated"
+}
+
+/** Pong message */
+interface PongMessage {
+    type: "pong"
+}
+
+/** Union type for all WebSocket messages */
+type WebSocketMessage = 
+    | ConnectedMessage 
+    | AudioReadyMessage 
+    | StatusMessage 
+    | ErrorMessage 
+    | ParamsUpdatedMessage 
+    | PongMessage
+
+/** Music generation parameters */
+export interface MusicParams {
+    tempo_bpm: number
+    scale: string
+    density: number
+    variation: number
+    drum_style: string
+    swing: number
+    bars: number
+}
+
+/** WebSocket event types */
+interface WebSocketOpenEvent {
+    type: string
+}
+
+interface WebSocketMessageEvent {
+    data: Blob | string
+}
+
+interface WebSocketCloseEvent {
+    wasClean: boolean
+    code: number
+    reason: string
+}
+
+interface WebSocketErrorEvent {
+    type: string
+}
+
+/** WebSocket interface for Lens Studio */
+interface LensWebSocket {
+    binaryType: string
+    onopen: ((event: WebSocketOpenEvent) => void) | null
+    onmessage: ((event: WebSocketMessageEvent) => void) | null
+    onclose: ((event: WebSocketCloseEvent) => void) | null
+    onerror: ((event: WebSocketErrorEvent) => void) | null
+    send: (data: string) => void
+    close: () => void
+}
+
+// InternetModule and RemoteMediaModule are built-in Lens Studio asset types
+// They are declared globally by Lens Studio's TypeScript definitions
+
+/** Delayed Callback Event interface */
+interface DelayedCallbackEvent {
+    bind: (callback: () => void) => void
+    reset: (delay: number) => void
+}
+
+// Note: AudioComponent in Lens Studio already has playbackMode property
+// No extension needed - we can use AudioComponent directly
+
+/**
+ * Main controller for PromptDJ music generation.
+ * Manages WebSocket connection, audio playback, and UI state.
+ */
+@component
+export class PromptDJController extends BaseScriptComponent {
+    // ========================================
+    // INPUTS
+    // ========================================
+    
+    @input("Asset.InternetModule")
+    @hint("Internet Module for WebSocket connection")
+    internetModule!: any
+    
+    @input("Asset.RemoteMediaModule")
+    @hint("Remote Media Module for audio loading")
+    remoteMediaModule!: any
+    
+    @input
+    @hint("WebSocket backend URL (ws://IP:8123/ws/spectacles/) - Use 127.0.0.1 for Lens Studio Preview, network IP for real Spectacles. Must end with /")
+    backendUrl: string = "ws://127.0.0.1:8123/ws/spectacles/"
+    
+    @input
+    @hint("Audio component for playback")
+    @allowUndefined
+    audioPlayer: AudioComponent | undefined
+    
+    @input
+    @hint("Use Low Latency audio mode (recommended for button feedback)")
+    useLowLatencyAudio: boolean = true
+    
+    @input
+    @hint("DynamicAudioOutput component for PCM16 audio playback (recommended)")
+    @allowUndefined
+    dynamicAudioOutput: DynamicAudioOutput | undefined
+    
+    @input
+    @hint("Status text display")
+    @allowUndefined
+    statusText: Text | undefined
+    
+    @input
+    @hint("Tempo text display")
+    @allowUndefined
+    tempoText: Text | undefined
+    
+    @input
+    @hint("Scale text display")
+    @allowUndefined
+    scaleText: Text | undefined
+    
+    @input
+    @hint("Drum style text display")
+    @allowUndefined
+    drumStyleText: Text | undefined
+    
+    // ========================================
+    // UI BUTTONS (optional)
+    // ========================================
+    
+    @input
+    @hint("Generate Melody button")
+    @allowUndefined
+    generateMelodyButton: SceneObject | undefined
+    
+    @input
+    @hint("Generate Drums button")
+    @allowUndefined
+    generateDrumsButton: SceneObject | undefined
+    
+    @input
+    @hint("Generate Both button")
+    @allowUndefined
+    generateBothButton: SceneObject | undefined
+    
+    @input
+    @hint("Tempo Up button")
+    @allowUndefined
+    tempoUpButton: SceneObject | undefined
+    
+    @input
+    @hint("Tempo Down button")
+    @allowUndefined
+    tempoDownButton: SceneObject | undefined
+    
+    @input
+    @hint("Next Scale button")
+    @allowUndefined
+    nextScaleButton: SceneObject | undefined
+    
+    @input
+    @hint("Next Drum Style button")
+    @allowUndefined
+    nextDrumStyleButton: SceneObject | undefined
+    
+    // ========================================
+    // STATE
+    // ========================================
+    
+    private socket: LensWebSocket | null = null
+    private isConnected: boolean = false
+    private clientId: string = "spectacles-" + Math.random().toString(36).substring(2, 11)
+    
+    /** Current music parameters - exposed for external access */
+    public params: MusicParams = {
+        tempo_bpm: 120,
+        scale: "C_major",
+        density: 0.55,
+        variation: 0.35,
+        drum_style: "techno",
+        swing: 0.0,
+        bars: 8
+    }
+    
+    private scales: string[] = ["C_major", "A_minor", "D_minor", "G_major", "E_minor", "F_major"]
+    private drumStyles: string[] = ["techno", "funk", "jazz", "electronic", "basic"]
+    private currentScaleIndex: number = 0
+    private currentDrumStyleIndex: number = 0
+    
+    private currentAudioUrl: string | null = null
+    private isPlaying: boolean = false
+    private audioLoadAttempts: number = 0
+    private readonly MAX_AUDIO_LOAD_ATTEMPTS: number = 3
+    
+    // Delayed events
+    private connectDelayEvent: DelayedCallbackEvent | null = null
+    private reconnectDelayEvent: DelayedCallbackEvent | null = null
+    private autoTestDelayEvent: DelayedCallbackEvent | null = null
+    private audioRetryDelayEvent: DelayedCallbackEvent | null = null
+    private audioPlayDelayEvent: DelayedCallbackEvent | null = null
+    
+    // ========================================
+    // EVENTS
+    // ========================================
+    
+    private onConnectedEvent = new Event()
+    public readonly onConnected = this.onConnectedEvent.publicApi()
+    
+    private onDisconnectedEvent = new Event()
+    public readonly onDisconnected = this.onDisconnectedEvent.publicApi()
+    
+    private onAudioReadyEvent = new Event<string>()
+    public readonly onAudioReady = this.onAudioReadyEvent.publicApi()
+    
+    private onAudioPlayingEvent = new Event()
+    public readonly onAudioPlaying = this.onAudioPlayingEvent.publicApi()
+    
+    private onAudioErrorEvent = new Event<string>()
+    public readonly onAudioError = this.onAudioErrorEvent.publicApi()
+    
+    private onParamsChangedEvent = new Event<MusicParams>()
+    public readonly onParamsChanged = this.onParamsChangedEvent.publicApi()
+    
+    // ========================================
+    // LIFECYCLE
+    // ========================================
+    
+    onAwake(): void {
+        log.i("Initializing...")
+        this.updateStatusText("Initializing...")
+        
+        // Register globally for access from other scripts
+        this.registerGlobal()
+        
+        // Create delayed events
+        this.connectDelayEvent = this.createEvent("DelayedCallbackEvent") as DelayedCallbackEvent
+        this.connectDelayEvent.bind(() => this.connect())
+        
+        this.reconnectDelayEvent = this.createEvent("DelayedCallbackEvent") as DelayedCallbackEvent
+        this.reconnectDelayEvent.bind(() => {
+            if (!this.isConnected) {
+                this.connect()
+            }
+        })
+        
+        this.autoTestDelayEvent = this.createEvent("DelayedCallbackEvent") as DelayedCallbackEvent
+        this.autoTestDelayEvent.bind(() => {
+            log.i("Auto-generating test melody...")
+            this.generateMelody()
+        })
+        
+        this.audioRetryDelayEvent = this.createEvent("DelayedCallbackEvent") as DelayedCallbackEvent
+        this.audioRetryDelayEvent.bind(() => {
+            if (this.currentAudioUrl && this.audioLoadAttempts < this.MAX_AUDIO_LOAD_ATTEMPTS) {
+                log.i("Retrying audio load (attempt " + (this.audioLoadAttempts + 1) + ")...")
+                this.loadAndPlayAudio(this.currentAudioUrl)
+            }
+        })
+        
+        // Create audio play delay event (for stable playback)
+        this.audioPlayDelayEvent = this.createEvent("DelayedCallbackEvent") as DelayedCallbackEvent
+        
+        // Setup on start
+        this.createEvent("OnStartEvent").bind(() => {
+            this.onStart()
+        })
+    }
+    
+    /**
+     * Register this controller globally so other scripts can access it.
+     * This fixes the "cannot set property 'generateMelody' of undefined" error.
+     */
+    private registerGlobal(): void {
+        // Register on global for legacy script access
+        global.promptDJController = this
+        log.i("Registered globally as global.promptDJController")
+    }
+    
+    private onStart(): void {
+        // Configure audio player for Spectacles
+        this.configureAudioPlayer()
+        
+        // Setup button callbacks
+        this.setupButtonCallbacks()
+        
+        // Update UI with initial values
+        this.updateUI()
+        
+        // Connect after delay
+        validate(this.connectDelayEvent)
+        this.connectDelayEvent!.reset(1.0)
+    }
+    
+    /**
+     * Configure the AudioComponent for optimal Spectacles playback.
+     * 
+     * KEY FINDINGS FROM RESEARCH:
+     * 1. Spectacles default to Low Power mode which has latency
+     * 2. Set playbackMode to LowLatency for immediate response
+     * 3. Max 16 concurrent audio tracks supported
+     */
+    private configureAudioPlayer(): void {
+        if (!this.audioPlayer) {
+            log.w("No AudioComponent connected - audio will not play!")
+            log.w("Please add an AudioComponent to the scene and connect it.")
+            return
+        }
+        
+        // Set Low Latency mode for immediate playback (Spectacles specific)
+        if (this.useLowLatencyAudio) {
+            try {
+                if (typeof Audio !== 'undefined' && Audio.PlaybackMode) {
+                    this.audioPlayer.playbackMode = Audio.PlaybackMode.LowLatency
+                    log.i("Audio playback mode set to LowLatency")
+                } else {
+                    log.d("Audio.PlaybackMode not available - using default mode")
+                }
+            } catch (e) {
+                log.w("Could not set LowLatency mode: " + e)
+            }
+        }
+        
+        // Log audio configuration
+        log.i("AudioComponent configured:")
+        log.i("  - Volume: " + (this.audioPlayer.volume || "default"))
+        log.i("  - Low Latency: " + this.useLowLatencyAudio)
+    }
+    
+    // ========================================
+    // BUTTON SETUP (SIK Pattern)
+    // ========================================
+    
+    private setupButtonCallbacks(): void {
+        const interactableTypeName = Interactable.getTypeName()
+        
+        // Generate Melody button
+        if (this.generateMelodyButton) {
+            const interactable = this.generateMelodyButton.getComponent(interactableTypeName) as Interactable | null
+            if (interactable) {
+                interactable.onTriggerEnd.add(() => this.generateMelody())
+            }
+        }
+        
+        // Generate Drums button
+        if (this.generateDrumsButton) {
+            const interactable = this.generateDrumsButton.getComponent(interactableTypeName) as Interactable | null
+            if (interactable) {
+                interactable.onTriggerEnd.add(() => this.generateDrums())
+            }
+        }
+        
+        // Generate Both button
+        if (this.generateBothButton) {
+            const interactable = this.generateBothButton.getComponent(interactableTypeName) as Interactable | null
+            if (interactable) {
+                interactable.onTriggerEnd.add(() => this.generateBoth())
+            }
+        }
+        
+        // Tempo Up button
+        if (this.tempoUpButton) {
+            const interactable = this.tempoUpButton.getComponent(interactableTypeName) as Interactable | null
+            if (interactable) {
+                interactable.onTriggerEnd.add(() => this.increaseTempo())
+            }
+        }
+        
+        // Tempo Down button
+        if (this.tempoDownButton) {
+            const interactable = this.tempoDownButton.getComponent(interactableTypeName) as Interactable | null
+            if (interactable) {
+                interactable.onTriggerEnd.add(() => this.decreaseTempo())
+            }
+        }
+        
+        // Next Scale button
+        if (this.nextScaleButton) {
+            const interactable = this.nextScaleButton.getComponent(interactableTypeName) as Interactable | null
+            if (interactable) {
+                interactable.onTriggerEnd.add(() => this.nextScale())
+            }
+        }
+        
+        // Next Drum Style button
+        if (this.nextDrumStyleButton) {
+            const interactable = this.nextDrumStyleButton.getComponent(interactableTypeName) as Interactable | null
+            if (interactable) {
+                interactable.onTriggerEnd.add(() => this.nextDrumStyle())
+            }
+        }
+    }
+    
+    // ========================================
+    // WEBSOCKET CONNECTION
+    // ========================================
+    
+    private connect(): void {
+        // Validate InternetModule
+        if (!this.internetModule) {
+            const errorMsg = "InternetModule not connected! Add InternetModule asset and connect it."
+            log.e(errorMsg)
+            this.updateStatusText("No InternetModule")
+            return
+        }
+        
+        // Validate backend URL
+        if (!this.backendUrl || this.backendUrl.trim() === "") {
+            const errorMsg = "Backend URL is empty! Set backendUrl in Inspector."
+            log.e(errorMsg)
+            this.updateStatusText("No Backend URL")
+            return
+        }
+        
+        // Normalize backend URL (ensure it ends with /)
+        let normalizedUrl = this.backendUrl.trim()
+        if (!normalizedUrl.endsWith("/")) {
+            normalizedUrl += "/"
+            log.w("Backend URL missing trailing slash, added automatically")
+        }
+        
+        // Build WebSocket URL
+        // Format: ws://IP:PORT/ws/spectacles/CLIENT_ID
+        const url = normalizedUrl + this.clientId
+        log.i("Connecting to: " + url)
+        log.i("Client ID: " + this.clientId)
+        log.i("Backend URL: " + normalizedUrl)
+        this.updateStatusText("Connecting...")
+        
+        // Validate URL format
+        if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
+            const errorMsg = "Invalid WebSocket URL! Must start with ws:// or wss://"
+            log.e(errorMsg)
+            log.e("Current URL: " + url)
+            log.e("Expected format: ws://IP:PORT/ws/spectacles/")
+            this.updateStatusText("Invalid URL")
+            return
+        }
+        
+        // Validate URL structure (simple regex check)
+        const urlPattern = /^wss?:\/\/[^\/]+:\d+\/.+/
+        if (!urlPattern.test(url)) {
+            const errorMsg = "Invalid URL format - check IP and port"
+            log.e(errorMsg)
+            log.e("URL: " + url)
+            log.e("Expected format: ws://IP:PORT/ws/spectacles/")
+            log.e("Example: ws://172.20.10.2:8123/ws/spectacles/")
+            this.updateStatusText("Invalid URL format")
+            return
+        }
+        
+        log.d("URL validation passed")
+        
+        // Warn if using localhost on real Spectacles
+        if (url.includes("127.0.0.1") || url.includes("localhost")) {
+            log.w("Using localhost URL - this only works in Lens Studio Preview!")
+            log.w("For real Spectacles, use your network IP (e.g., ws://172.20.10.2:8123/ws/spectacles/)")
+        }
+        
+        try {
+            log.d("Creating WebSocket connection...")
+            this.socket = this.internetModule.createWebSocket(url)
+            
+            if (!this.socket) {
+                const errorMsg = "createWebSocket returned null - check InternetModule configuration"
+                log.e(errorMsg)
+                this.updateStatusText("WebSocket creation failed")
+                return
+            }
+            
+            this.socket.binaryType = "blob"
+            log.d("WebSocket created, setting up handlers...")
+            
+            this.socket.onopen = () => {
+                this.isConnected = true
+                log.i("✓ WebSocket Connected!")
+                log.i("  URL: " + url)
+                log.i("  Client ID: " + this.clientId)
+                this.updateStatusText("Connected ✓")
+                this.onConnectedEvent.invoke()
+                
+                // Auto-test after 3 seconds
+                validate(this.autoTestDelayEvent)
+                this.autoTestDelayEvent!.reset(3.0)
+            }
+            
+            this.socket.onmessage = async (event: WebSocketMessageEvent) => {
+                try {
+                    let data: WebSocketMessage
+                
+                if (event.data instanceof Blob) {
+                    const text = await event.data.text()
+                        data = JSON.parse(text) as WebSocketMessage
+                } else {
+                        data = JSON.parse(event.data as string) as WebSocketMessage
+                }
+                
+                this.handleMessage(data)
+                } catch (e) {
+                    log.e("Error parsing WebSocket message: " + e)
+                    log.e("Raw data: " + (event.data instanceof Blob ? "[Blob]" : event.data))
+                }
+            }
+            
+            this.socket.onclose = (event: WebSocketCloseEvent) => {
+                this.isConnected = false
+                
+                log.i("WebSocket closed:")
+                log.i("  Code: " + event.code)
+                log.i("  Reason: " + (event.reason || "none"))
+                log.i("  Was Clean: " + event.wasClean)
+                
+                if (event.wasClean) {
+                    log.i("Connection closed cleanly")
+                    this.updateStatusText("Disconnected")
+                } else {
+                    log.w("Connection lost unexpectedly!")
+                    log.w("  Close code: " + event.code)
+                    log.w("  Reason: " + (event.reason || "unknown"))
+                    
+                    // Common error codes
+                    if (event.code === 1006) {
+                        log.e("Error 1006: Abnormal closure - check network connection and server status")
+                        this.updateStatusText("Connection failed (1006)")
+                    } else if (event.code === 1002) {
+                        log.e("Error 1002: Protocol error - check WebSocket URL format")
+                        this.updateStatusText("Protocol error (1002)")
+                    } else if (event.code === 1003) {
+                        log.e("Error 1003: Unsupported data - check message format")
+                        this.updateStatusText("Data error (1003)")
+                    } else {
+                        this.updateStatusText("Connection lost (" + event.code + ")")
+                    }
+                }
+                
+                this.onDisconnectedEvent.invoke()
+                
+                // Auto-reconnect only if not a clean close
+                if (!event.wasClean) {
+                validate(this.reconnectDelayEvent)
+                    this.reconnectDelayEvent!.reset(3.0)
+                }
+            }
+            
+            this.socket.onerror = (event: WebSocketErrorEvent) => {
+                log.e("WebSocket error occurred!")
+                log.e("  Event type: " + (event.type || "unknown"))
+                log.e("  URL: " + url)
+                
+                // Common issues
+                log.e("Troubleshooting:")
+                log.e("  1. Check server is running: curl http://YOUR_IP:8123/api")
+                log.e("  2. Verify WebSocket URL format: ws://IP:PORT/ws/spectacles/")
+                log.e("  3. Check firewall allows port 8123")
+                log.e("  4. Ensure same WiFi network")
+                log.e("  5. For real Spectacles, use network IP (not 127.0.0.1)")
+                
+                this.updateStatusText("Connection error")
+            }
+            
+            log.d("WebSocket handlers configured, waiting for connection...")
+            
+        } catch (e) {
+            const errorMsg = "Failed to create WebSocket: " + e
+            log.e(errorMsg)
+            log.e("Stack trace: " + (e instanceof Error ? e.stack : "N/A"))
+            this.updateStatusText("Failed to connect")
+            
+            // Additional diagnostics
+            log.e("Diagnostics:")
+            log.e("  InternetModule: " + (this.internetModule ? "✓" : "✗"))
+            log.e("  Backend URL: " + this.backendUrl)
+            log.e("  Full URL: " + url)
+        }
+    }
+    
+    /** Disconnect from WebSocket */
+    public disconnect(): void {
+        if (this.socket) {
+            this.socket.close()
+            this.socket = null
+        }
+        this.isConnected = false
+    }
+    
+    // ========================================
+    // MESSAGE HANDLING
+    // ========================================
+    
+    private handleMessage(data: WebSocketMessage): void {
+        log.d("Received: " + data.type)
+        
+        switch (data.type) {
+            case "connected":
+                this.handleConnectedMessage(data)
+                break
+                
+            case "audio_ready":
+                this.handleAudioReady(data)
+                break
+                
+            case "params_updated":
+                this.updateStatusText("Params Updated")
+                break
+                
+            case "status":
+                this.updateStatusText(data.message)
+                break
+                
+            case "error":
+                log.e("Server error: " + data.message)
+                this.updateStatusText("Error!")
+                break
+                
+            case "pong":
+                log.d("Pong received")
+                break
+        }
+    }
+    
+    private handleConnectedMessage(data: ConnectedMessage): void {
+        if (data.state) {
+            this.params = { ...this.params, ...data.state }
+        }
+        if (data.available_scales) {
+            this.scales = data.available_scales
+        }
+        if (data.available_drum_styles) {
+            this.drumStyles = data.available_drum_styles
+        }
+        this.updateUI()
+    }
+    
+    private handleAudioReady(data: AudioReadyMessage): void {
+        log.i("Audio ready!")
+        log.i("  Format: " + data.format)
+        
+        // Handle PCM16 format (preferred for Spectacles - uses DynamicAudioOutput)
+        if (data.format === "pcm16" && data.audio_base64) {
+            log.i("  Sample Rate: " + data.sample_rate)
+            log.i("  Channels: " + data.channels)
+            log.i("  Samples: " + data.sample_count)
+            
+            this.playPCM16Audio(data)
+            return
+        }
+        
+        // Legacy: Handle URL-based formats (mp3, both)
+        log.i("  Size: " + (data.size_bytes || "unknown") + " bytes")
+        
+        let url = data.url
+        
+        // Handle "both" format
+        if (data.format === "both" && data.melody) {
+            url = data.melody.url
+            log.d("Melody URL: " + url)
+            if (data.drums) {
+                log.d("Drums URL: " + data.drums.url)
+            }
+        }
+        
+        if (!url) {
+            this.updateStatusText("No audio URL")
+            this.onAudioErrorEvent.invoke("No audio URL received")
+            return
+        }
+        
+        // Reset retry counter for new audio
+        this.audioLoadAttempts = 0
+        this.currentAudioUrl = url
+        this.updateStatusText("Loading audio...")
+        log.i("Loading audio from: " + url)
+        
+        this.onAudioReadyEvent.invoke(url)
+        this.loadAndPlayAudio(url)
+    }
+    
+    /**
+     * Play PCM16 audio using DynamicAudioOutput.
+     * This is the preferred method for Spectacles as it bypasses RemoteMediaModule.
+     */
+    private playPCM16Audio(data: AudioReadyMessage): void {
+        // Check for DynamicAudioOutput
+        if (!this.dynamicAudioOutput) {
+            log.e("DynamicAudioOutput not connected!")
+            log.e("Please add DynamicAudioOutput component and connect it.")
+            this.updateStatusText("No DynamicAudioOutput")
+            this.onAudioErrorEvent.invoke("DynamicAudioOutput not connected")
+            return
+        }
+        
+        if (!data.audio_base64) {
+            log.e("No audio_base64 data received")
+            this.updateStatusText("No audio data")
+            this.onAudioErrorEvent.invoke("No PCM16 audio data")
+            return
+        }
+        
+        const sampleRate = data.sample_rate || 48000
+        const channels = data.channels || 1
+        
+        this.updateStatusText("Playing audio...")
+        log.i("Playing PCM16 audio via DynamicAudioOutput")
+        log.i("  Sample Rate: " + sampleRate)
+        log.i("  Channels: " + channels)
+        log.i("  Base64 length: " + data.audio_base64.length)
+        
+        try {
+            // Initialize DynamicAudioOutput with correct sample rate
+            if (!this.dynamicAudioOutput.initialize(sampleRate)) {
+                log.e("Failed to initialize DynamicAudioOutput")
+                this.updateStatusText("Audio init failed")
+                this.onAudioErrorEvent.invoke("DynamicAudioOutput init failed")
+                return
+            }
+            
+            // Add the PCM16 audio data
+            this.dynamicAudioOutput.addAudioFromBase64(data.audio_base64, channels)
+            
+            this.isPlaying = true
+            this.updateStatusText("Playing ♪")
+            log.i("PCM16 audio playback started!")
+            
+            // Trigger events
+            this.onAudioPlayingEvent.invoke()
+            this.triggerHapticFeedback()
+            
+        } catch (e) {
+            const errorMsg = "PCM16 playback error: " + e
+            log.e(errorMsg)
+            this.updateStatusText("Playback error")
+            this.onAudioErrorEvent.invoke(errorMsg)
+        }
+    }
+    
+    // ========================================
+    // AUDIO PLAYBACK
+    // ========================================
+    
+    /**
+     * Load and play audio from URL.
+     * 
+     * SPECTACLES AUDIO REQUIREMENTS (from research):
+     * 1. RemoteMediaModule required for remote audio
+     * 2. AudioComponent must be connected
+     * 3. Max 16 concurrent tracks
+     * 4. MP3 format recommended
+     * 5. Mono channel preferred
+     * 6. Under 15 seconds optimal
+     */
+    private loadAndPlayAudio(url: string): void {
+        this.audioLoadAttempts++
+        
+        // Validate RemoteMediaModule
+        if (!this.remoteMediaModule) {
+            const errorMsg = "RemoteMediaModule not connected! This is REQUIRED for audio playback on Spectacles."
+            log.e(errorMsg)
+            this.updateStatusText("No RemoteMediaModule")
+            this.onAudioErrorEvent.invoke(errorMsg)
+            return
+        }
+        
+        // Validate AudioComponent
+        if (!this.audioPlayer) {
+            const errorMsg = "AudioComponent not connected! Add an AudioComponent to the scene."
+            log.e(errorMsg)
+            this.updateStatusText("No AudioPlayer")
+            this.onAudioErrorEvent.invoke(errorMsg)
+            return
+        }
+        
+        // Validate InternetModule
+        if (!this.internetModule) {
+            const errorMsg = "InternetModule not connected!"
+            log.e(errorMsg)
+            this.updateStatusText("No InternetModule")
+            this.onAudioErrorEvent.invoke(errorMsg)
+            return
+        }
+        
+        // Stop any current playback before loading new audio
+        if (this.isPlaying) {
+            this.stopPlayback()
+        }
+        
+        try {
+            log.i("Creating resource from URL...")
+            const resource = this.internetModule.makeResourceFromUrl(url)
+            
+            log.i("Loading audio asset...")
+            this.remoteMediaModule.loadResourceAsAudioTrackAsset(
+                resource,
+                (audioTrack: AudioTrackAsset) => {
+                    this.onAudioLoaded(audioTrack)
+                },
+                (error: string) => {
+                    this.onAudioLoadError(error)
+                }
+            )
+        } catch (e) {
+            const errorMsg = "Audio loading exception: " + e
+            log.e(errorMsg)
+            this.updateStatusText("Audio error")
+            this.onAudioErrorEvent.invoke(errorMsg)
+            
+            // Retry on exception
+            this.scheduleAudioRetry()
+        }
+    }
+    
+    /**
+     * Called when audio track is successfully loaded.
+     */
+    private onAudioLoaded(audioTrack: AudioTrackAsset): void {
+                    log.i("Audio loaded successfully!")
+        
+        // Validate audio track
+        if (!audioTrack) {
+            const errorMsg = "Audio track is null or invalid"
+            log.e(errorMsg)
+            this.updateStatusText("Invalid audio track")
+            this.onAudioErrorEvent.invoke(errorMsg)
+            return
+        }
+        
+        // Validate audio player
+        if (!this.audioPlayer) {
+            log.e("AudioPlayer disappeared!")
+            this.onAudioErrorEvent.invoke("AudioPlayer not available")
+            return
+        }
+        
+        // Validate audio player is enabled
+        if (!this.audioPlayer.enabled) {
+            log.w("AudioPlayer is disabled - enabling it...")
+            this.audioPlayer.enabled = true
+        }
+        
+        try {
+            // Store reference to audio player to avoid null issues
+            const audioPlayer = this.audioPlayer
+            if (!audioPlayer) {
+                const errorMsg = "AudioPlayer is null"
+                log.e(errorMsg)
+                this.updateStatusText("No AudioPlayer")
+                this.onAudioErrorEvent.invoke(errorMsg)
+                return
+            }
+            
+            // Stop any current playback first
+            if (this.isPlaying) {
+                try {
+                    audioPlayer.stop(true)
+                } catch (e) {
+                    log.d("No audio to stop: " + e)
+                }
+            }
+            
+            // Ensure audio player is enabled
+            if (!audioPlayer.enabled) {
+                audioPlayer.enabled = true
+                log.d("Enabled AudioComponent")
+            }
+            
+            // Assign the audio track
+            audioPlayer.audioTrack = audioTrack
+            log.d("Audio track assigned")
+            
+            // Validate track was assigned
+            if (!audioPlayer.audioTrack) {
+                const errorMsg = "Failed to assign audio track"
+                log.e(errorMsg)
+                this.updateStatusText("Track assignment failed")
+                this.onAudioErrorEvent.invoke(errorMsg)
+                return
+            }
+            
+            // Small delay to ensure track is assigned (helps with Spectacles validation)
+            // This fixes the "cannot play audio" configuration validator error
+            if (!this.audioPlayDelayEvent) {
+                log.e("audioPlayDelayEvent is null - cannot delay playback")
+                // Try immediate playback as fallback
+                try {
+                    audioPlayer.play(1)
+                    this.isPlaying = true
+                    this.updateStatusText("Playing ♪")
+                    log.i("Audio playback started (immediate)")
+                    this.onAudioPlayingEvent.invoke()
+                    this.triggerHapticFeedback()
+                } catch (e) {
+                    const errorMsg = "Immediate playback failed: " + e
+                    log.e(errorMsg)
+                    this.updateStatusText("Playback failed")
+                    this.onAudioErrorEvent.invoke(errorMsg)
+                }
+                return
+            }
+            
+            validate(this.audioPlayDelayEvent)
+            
+            // Store references in closure to avoid null issues
+            const trackRef = audioTrack
+            const playerRef = audioPlayer
+            
+            this.audioPlayDelayEvent.bind(() => {
+                try {
+                    // Validate references are still valid
+                    if (!playerRef) {
+                        log.e("AudioPlayer reference lost")
+                        this.onAudioErrorEvent.invoke("AudioPlayer lost")
+                        return
+                    }
+                    
+                    if (!playerRef.audioTrack) {
+                        log.e("Audio track lost before playback")
+                        this.onAudioErrorEvent.invoke("Audio track lost")
+                        return
+                    }
+                    
+                    // Ensure audio player is still enabled
+                    if (!playerRef.enabled) {
+                        playerRef.enabled = true
+                    }
+                    
+                    // Play the audio (1 = play once)
+                    playerRef.play(1)
+                    
+                    this.isPlaying = true
+                    this.updateStatusText("Playing ♪")
+                    log.i("Audio playback started!")
+                    
+                    // Trigger events
+                    this.onAudioPlayingEvent.invoke()
+                    this.triggerHapticFeedback()
+                    
+                } catch (e) {
+                    const errorMsg = "Error starting playback: " + e
+                    log.e(errorMsg)
+                    log.e("Stack: " + (e instanceof Error ? e.stack : "N/A"))
+                    this.updateStatusText("Playback error")
+                    this.onAudioErrorEvent.invoke(errorMsg)
+                }
+            })
+            
+            this.audioPlayDelayEvent.reset(0.1) // 100ms delay for validation
+            log.d("Scheduled audio playback (100ms delay)")
+            
+        } catch (e) {
+            const errorMsg = "Error setting up playback: " + e
+            log.e(errorMsg)
+            log.e("Stack: " + (e instanceof Error ? e.stack : "N/A"))
+            this.updateStatusText("Playback setup error")
+            this.onAudioErrorEvent.invoke(errorMsg)
+        }
+    }
+    
+    /**
+     * Called when audio loading fails.
+     */
+    private onAudioLoadError(error: string): void {
+                    log.e("Failed to load audio: " + error)
+        log.e("Attempt " + this.audioLoadAttempts + " of " + this.MAX_AUDIO_LOAD_ATTEMPTS)
+        
+        // Common error causes on Spectacles:
+        // - Network connectivity issues
+        // - Unsupported audio format (use MP3)
+        // - Audio file too large
+        // - CORS issues on server
+        
+        if (this.audioLoadAttempts < this.MAX_AUDIO_LOAD_ATTEMPTS) {
+            this.updateStatusText("Retrying audio...")
+            this.scheduleAudioRetry()
+        } else {
+                    this.updateStatusText("Audio load failed")
+            this.onAudioErrorEvent.invoke("Failed after " + this.MAX_AUDIO_LOAD_ATTEMPTS + " attempts: " + error)
+        }
+    }
+    
+    /**
+     * Schedule an audio load retry.
+     */
+    private scheduleAudioRetry(): void {
+        validate(this.audioRetryDelayEvent)
+        this.audioRetryDelayEvent!.reset(1.0) // Retry after 1 second
+    }
+    
+    // ========================================
+    // SEND COMMANDS
+    // ========================================
+    
+    private send(action: string, actionParams?: object): void {
+        if (!this.isConnected || !this.socket) {
+            log.w("Not connected")
+            this.updateStatusText("Not connected")
+            return
+        }
+        
+        const message = JSON.stringify({
+            action: action,
+            params: actionParams || {}
+        })
+        
+        this.socket.send(message)
+        log.d("Sent: " + action)
+    }
+    
+    // ========================================
+    // PUBLIC API
+    // ========================================
+    
+    /** Generate a melody with current parameters */
+    public generateMelody(): void {
+        this.updateStatusText("Generating melody...")
+        this.send("generate_melody", {
+            tempo_bpm: this.params.tempo_bpm,
+            scale: this.params.scale,
+            bars: this.params.bars,
+            density: this.params.density,
+            variation: this.params.variation
+        })
+    }
+    
+    /** Generate drums with current parameters */
+    public generateDrums(): void {
+        this.updateStatusText("Generating drums...")
+        this.send("generate_drums", {
+            tempo_bpm: this.params.tempo_bpm,
+            style: this.params.drum_style,
+            bars: this.params.bars,
+            swing: this.params.swing
+        })
+    }
+    
+    /** Generate both melody and drums */
+    public generateBoth(): void {
+        this.updateStatusText("Generating both...")
+        this.send("generate_both", {
+            tempo_bpm: this.params.tempo_bpm,
+            scale: this.params.scale,
+            style: this.params.drum_style,
+            bars: this.params.bars,
+            density: this.params.density,
+            variation: this.params.variation,
+            swing: this.params.swing
+        })
+    }
+    
+    /** Stop current playback */
+    public stopPlayback(): void {
+        if (this.audioPlayer && this.isPlaying) {
+            try {
+            this.audioPlayer.stop(true)
+            } catch (e) {
+                log.w("Error stopping audio: " + e)
+            }
+            this.isPlaying = false
+            this.updateStatusText("Stopped")
+        }
+    }
+    
+    /** Increase tempo by 5 BPM */
+    public increaseTempo(): void {
+        this.params.tempo_bpm = Math.min(180, this.params.tempo_bpm + 5)
+        this.updateUI()
+        this.syncParams()
+    }
+    
+    /** Decrease tempo by 5 BPM */
+    public decreaseTempo(): void {
+        this.params.tempo_bpm = Math.max(60, this.params.tempo_bpm - 5)
+        this.updateUI()
+        this.syncParams()
+    }
+    
+    /** Cycle to next scale */
+    public nextScale(): void {
+        this.currentScaleIndex = (this.currentScaleIndex + 1) % this.scales.length
+        this.params.scale = this.scales[this.currentScaleIndex]
+        this.updateUI()
+        this.syncParams()
+    }
+    
+    /** Cycle to previous scale */
+    public previousScale(): void {
+        this.currentScaleIndex = (this.currentScaleIndex - 1 + this.scales.length) % this.scales.length
+        this.params.scale = this.scales[this.currentScaleIndex]
+        this.updateUI()
+        this.syncParams()
+    }
+    
+    /** Cycle to next drum style */
+    public nextDrumStyle(): void {
+        this.currentDrumStyleIndex = (this.currentDrumStyleIndex + 1) % this.drumStyles.length
+        this.params.drum_style = this.drumStyles[this.currentDrumStyleIndex]
+        this.updateUI()
+        this.syncParams()
+    }
+    
+    /** Cycle to previous drum style */
+    public previousDrumStyle(): void {
+        this.currentDrumStyleIndex = (this.currentDrumStyleIndex - 1 + this.drumStyles.length) % this.drumStyles.length
+        this.params.drum_style = this.drumStyles[this.currentDrumStyleIndex]
+        this.updateUI()
+        this.syncParams()
+    }
+    
+    /** Set density (0-1) */
+    public setDensity(value: number): void {
+        this.params.density = Math.max(0, Math.min(1, value))
+        this.syncParams()
+    }
+    
+    /** Set variation (0-1) */
+    public setVariation(value: number): void {
+        this.params.variation = Math.max(0, Math.min(1, value))
+        this.syncParams()
+    }
+    
+    /** Set number of bars */
+    public setBars(value: number): void {
+        this.params.bars = Math.max(2, Math.min(64, value))
+        this.syncParams()
+    }
+    
+    /** Send ping to test connection */
+    public ping(): void {
+        this.send("ping")
+    }
+    
+    /**
+     * Test WebSocket connection and log diagnostics.
+     * Call this to debug connection issues.
+     */
+    public testConnection(): void {
+        log.i("=== WebSocket Connection Test ===")
+        log.i("InternetModule: " + (this.internetModule ? "✓ Connected" : "✗ Missing"))
+        log.i("RemoteMediaModule: " + (this.remoteMediaModule ? "✓ Connected" : "✗ Missing"))
+        log.i("AudioPlayer: " + (this.audioPlayer ? "✓ Connected" : "✗ Missing"))
+        log.i("Backend URL: " + this.backendUrl)
+        log.i("Client ID: " + this.clientId)
+        log.i("Full WebSocket URL: " + (this.backendUrl + this.clientId))
+        log.i("Is Connected: " + this.isConnected)
+        log.i("Socket: " + (this.socket ? "✓ Active" : "✗ Null"))
+        
+        if (!this.internetModule) {
+            log.e("ERROR: InternetModule not connected!")
+            log.e("  → Add InternetModule asset in Asset Browser")
+            log.e("  → Drag it to PromptDJController's 'Internet Module' input")
+            return
+        }
+        
+        if (!this.backendUrl || this.backendUrl.trim() === "") {
+            log.e("ERROR: Backend URL is empty!")
+            log.e("  → Set 'Backend Url' in Inspector")
+            log.e("  → Format: ws://YOUR_IP:8123/ws/spectacles/")
+            log.e("  → Use 127.0.0.1 for Preview, network IP for real Spectacles")
+            return
+        }
+        
+        const url = this.backendUrl + this.clientId
+        if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
+            log.e("ERROR: Invalid WebSocket URL format!")
+            log.e("  → Must start with ws:// or wss://")
+            log.e("  → Current: " + url)
+            return
+        }
+        
+        if (url.includes("127.0.0.1") || url.includes("localhost")) {
+            log.w("WARNING: Using localhost - only works in Lens Studio Preview!")
+            log.w("  → For real Spectacles, use network IP")
+            log.w("  → Get IP: ipconfig getifaddr en0")
+        }
+        
+        log.i("Attempting connection...")
+        this.connect()
+    }
+    
+    /** Get current parameters */
+    public getParams(): MusicParams {
+        return { ...this.params }
+    }
+    
+    /** Check if connected */
+    public getIsConnected(): boolean {
+        return this.isConnected
+    }
+    
+    /** Check if playing */
+    public getIsPlaying(): boolean {
+        return this.isPlaying
+    }
+    
+    /** Get current audio URL */
+    public getCurrentAudioUrl(): string | null {
+        return this.currentAudioUrl
+    }
+    
+    // ========================================
+    // SYNC & UI
+    // ========================================
+    
+    private syncParams(): void {
+        this.send("update_params", this.params)
+        this.onParamsChangedEvent.invoke(this.params)
+    }
+    
+    private updateUI(): void {
+        if (this.tempoText) {
+            this.tempoText.text = this.params.tempo_bpm + " BPM"
+        }
+        if (this.scaleText) {
+            this.scaleText.text = this.params.scale.replace("_", " ")
+        }
+        if (this.drumStyleText) {
+            const style = this.params.drum_style
+            this.drumStyleText.text = style.charAt(0).toUpperCase() + style.slice(1)
+        }
+    }
+    
+    private updateStatusText(message: string): void {
+        if (this.statusText) {
+            this.statusText.text = message
+        }
+        log.i("Status: " + message)
+    }
+    
+    private triggerHapticFeedback(): void {
+        try {
+            if (global.HapticFeedbackSystem) {
+                global.HapticFeedbackSystem.hapticFeedback(HapticFeedbackType.Success)
+            }
+        } catch (e) {
+            // Haptics not available
+        }
+    }
+}

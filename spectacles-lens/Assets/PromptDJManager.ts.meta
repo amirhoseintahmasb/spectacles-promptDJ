@@ -1,0 +1,62 @@
+- !<AssetImportMetadata/9cc4af07-054e-446c-aca3-06f48c3fb962>
+  ImportedAssetIds:
+    TypeScriptAsset: !<reference> fc96bf28-dd07-405b-aa8c-8441079b7414
+  ImporterName: TypeScriptAssetImporter
+  PrimaryAsset: !<reference> fc96bf28-dd07-405b-aa8c-8441079b7414
+  PackageType: NotAPackage
+  LegacyPackagePolicy: ~
+  ExtraData:
+    {}
+  AssetDataMap:
+    TypeScriptAsset: !<own> 0547214c-a094-4f2b-a350-09bc855940d0
+  DependentFiles:
+    []
+  ImporterSettings: !<AssetImporterSettings>
+    {}
+  CompressionSettings: !<own> 00000000-0000-0000-0000-000000000000
+- !<TypeScriptAssetData/0547214c-a094-4f2b-a350-09bc855940d0>
+  SvgIcon: ""
+  SetupScript:
+    code: ""
+  Description: ""
+  VersionMajor: 0
+  VersionMinor: 0
+  VersionPatch: 0
+  ComponentUid: 628c33b7-7ae3-45ce-8bd6-00801e2777f6
+  ExportUid: 00000000-0000-0000-0000-000000000000
+  PackagePolicy: CanBeUnpacked
+  ScriptInputsHidden:
+    audioPlayer: false
+    backendUrl: false
+    bpmText: false
+    genreText: false
+    internetModule: false
+    remoteMediaModule: false
+    statusText: false
+  ScriptTypesHidden:
+    {}
+  ReadMe: !<reference> 00000000-0000-0000-0000-000000000000
+  DeclarationFile: !<reference> 00000000-0000-0000-0000-000000000000
+  Tags:
+    []
+  Attachments:
+    []
+  DefaultScriptInputs:
+    - internetModule: !<reference.InternetModule> 00000000-0000-0000-0000-000000000000
+      remoteMediaModule: !<reference.RemoteMediaModule> 00000000-0000-0000-0000-000000000000
+      audioPlayer: !<reference.AudioComponent> 00000000-0000-0000-0000-000000000000
+      backendUrl: "ws://172.20.10.3:8123/ws/spectacles/"
+      statusText: !<reference.Text> 00000000-0000-0000-0000-000000000000
+      genreText: !<reference.Text> 00000000-0000-0000-0000-000000000000
+      bpmText: !<reference.Text> 00000000-0000-0000-0000-000000000000
+  ScriptTypes:
+    -
+      {}
+  InputLines:
+    - '// @input Asset.InternetModule internetModule {"hint":"REQUIRED: Add InternetModule from Asset Browser"}'
+    - '// @input Asset.RemoteMediaModule remoteMediaModule {"hint":"REQUIRED: Add RemoteMediaModule from Asset Browser"}'
+    - '// @input Component.AudioComponent audioPlayer {"hint":"REQUIRED: AudioComponent for playback"}'
+    - "// @input string backendUrl = \"ws://172.20.10.3:8123/ws/spectacles/\" {\"hint\":\"Backend URL - Use your Mac's IP (not 127.0.0.1 for real Spectacles)\"}"
+    - '// @input Component.Text statusText {"hint":"Status text (optional)"}'
+    - '// @input Component.Text genreText {"hint":"Genre/Now Playing text (optional)"}'
+    - '// @input Component.Text bpmText {"hint":"BPM text (optional)"}'

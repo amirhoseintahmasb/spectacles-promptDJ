@@ -13,9 +13,9 @@ else
 fi
 
 echo "🎵 Starting Music AI Service..."
-echo "   API Docs: http://127.0.0.1:8123/docs"
+echo "   API Docs: http://172.20.10.4:8123/docs"
 echo "   Press Ctrl+C to stop"
 echo ""
 
-uvicorn app:app --reload --port 8123
+uvicorn app:app --reload --host 172.20.10.4 --port 8123
 

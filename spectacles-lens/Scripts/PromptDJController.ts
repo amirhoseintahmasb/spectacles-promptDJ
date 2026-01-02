@@ -17,6 +17,7 @@ import {Interactable} from "SpectaclesInteractionKit.lspkg/Components/Interactio
 import NativeLogger from "SpectaclesInteractionKit.lspkg/Utils/NativeLogger"
 import {validate} from "SpectaclesInteractionKit.lspkg/Utils/validate"
 import Event from "SpectaclesInteractionKit.lspkg/Utils/Event"
+import {DynamicAudioOutput} from "./DynamicAudioOutput"
 
 // Declare global types for Lens Studio
 declare const HapticFeedbackType: { Success: any }
@@ -48,12 +49,18 @@ interface ConnectedMessage {
     available_drum_styles?: string[]
 }
 
-/** Audio ready message */
+/** Audio ready message - now supports PCM16 base64 format */
 interface AudioReadyMessage {
     type: "audio_ready"
-    url: string
-    format: string
-    size_bytes: number
+    format: string  // "pcm16" | "mp3" | "both"
+    // PCM16 format fields (for DynamicAudioOutput)
+    audio_base64?: string
+    sample_rate?: number
+    channels?: number
+    sample_count?: number
+    // Legacy MP3 format fields
+    url?: string
+    size_bytes?: number
     melody?: { url: string; size_bytes: number }
     drums?: { url: string; size_bytes: number }
 }
@@ -172,6 +179,11 @@ export class PromptDJController extends BaseScriptComponent {
     @input
     @hint("Use Low Latency audio mode (recommended for button feedback)")
     useLowLatencyAudio: boolean = true
+    
+    @input
+    @hint("DynamicAudioOutput component for PCM16 audio playback (recommended)")
+    @allowUndefined
+    dynamicAudioOutput: DynamicAudioOutput | undefined
     
     @input
     @hint("Status text display")
@@ -702,7 +714,19 @@ export class PromptDJController extends BaseScriptComponent {
     private handleAudioReady(data: AudioReadyMessage): void {
         log.i("Audio ready!")
         log.i("  Format: " + data.format)
-        log.i("  Size: " + data.size_bytes + " bytes")
+        
+        // Handle PCM16 format (preferred for Spectacles - uses DynamicAudioOutput)
+        if (data.format === "pcm16" && data.audio_base64) {
+            log.i("  Sample Rate: " + data.sample_rate)
+            log.i("  Channels: " + data.channels)
+            log.i("  Samples: " + data.sample_count)
+            
+            this.playPCM16Audio(data)
+            return
+        }
+        
+        // Legacy: Handle URL-based formats (mp3, both)
+        log.i("  Size: " + (data.size_bytes || "unknown") + " bytes")
         
         let url = data.url
         
@@ -729,6 +753,64 @@ export class PromptDJController extends BaseScriptComponent {
         
         this.onAudioReadyEvent.invoke(url)
         this.loadAndPlayAudio(url)
+    }
+    
+    /**
+     * Play PCM16 audio using DynamicAudioOutput.
+     * This is the preferred method for Spectacles as it bypasses RemoteMediaModule.
+     */
+    private playPCM16Audio(data: AudioReadyMessage): void {
+        // Check for DynamicAudioOutput
+        if (!this.dynamicAudioOutput) {
+            log.e("DynamicAudioOutput not connected!")
+            log.e("Please add DynamicAudioOutput component and connect it.")
+            this.updateStatusText("No DynamicAudioOutput")
+            this.onAudioErrorEvent.invoke("DynamicAudioOutput not connected")
+            return
+        }
+        
+        if (!data.audio_base64) {
+            log.e("No audio_base64 data received")
+            this.updateStatusText("No audio data")
+            this.onAudioErrorEvent.invoke("No PCM16 audio data")
+            return
+        }
+        
+        const sampleRate = data.sample_rate || 48000
+        const channels = data.channels || 1
+        
+        this.updateStatusText("Playing audio...")
+        log.i("Playing PCM16 audio via DynamicAudioOutput")
+        log.i("  Sample Rate: " + sampleRate)
+        log.i("  Channels: " + channels)
+        log.i("  Base64 length: " + data.audio_base64.length)
+        
+        try {
+            // Initialize DynamicAudioOutput with correct sample rate
+            if (!this.dynamicAudioOutput.initialize(sampleRate)) {
+                log.e("Failed to initialize DynamicAudioOutput")
+                this.updateStatusText("Audio init failed")
+                this.onAudioErrorEvent.invoke("DynamicAudioOutput init failed")
+                return
+            }
+            
+            // Add the PCM16 audio data
+            this.dynamicAudioOutput.addAudioFromBase64(data.audio_base64, channels)
+            
+            this.isPlaying = true
+            this.updateStatusText("Playing ♪")
+            log.i("PCM16 audio playback started!")
+            
+            // Trigger events
+            this.onAudioPlayingEvent.invoke()
+            this.triggerHapticFeedback()
+            
+        } catch (e) {
+            const errorMsg = "PCM16 playback error: " + e
+            log.e(errorMsg)
+            this.updateStatusText("Playback error")
+            this.onAudioErrorEvent.invoke(errorMsg)
+        }
     }
     
     // ========================================

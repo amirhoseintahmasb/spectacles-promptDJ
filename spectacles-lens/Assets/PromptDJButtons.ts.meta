@@ -1,0 +1,47 @@
+- !<AssetImportMetadata/d5de8f11-cbb3-4e17-8d06-7fb8b22448c9>
+  ImportedAssetIds:
+    TypeScriptAsset: !<reference> 7e08933a-fad9-49ad-87b1-f3bde6ae5abd
+  ImporterName: TypeScriptAssetImporter
+  PrimaryAsset: !<reference> 7e08933a-fad9-49ad-87b1-f3bde6ae5abd
+  PackageType: NotAPackage
+  LegacyPackagePolicy: ~
+  ExtraData:
+    {}
+  AssetDataMap:
+    TypeScriptAsset: !<own> 564d31f1-2e4f-49f7-a465-ac946a470a14
+  DependentFiles:
+    []
+  ImporterSettings: !<AssetImporterSettings>
+    {}
+  CompressionSettings: !<own> 00000000-0000-0000-0000-000000000000
+- !<TypeScriptAssetData/564d31f1-2e4f-49f7-a465-ac946a470a14>
+  SvgIcon: ""
+  SetupScript:
+    code: ""
+  Description: ""
+  VersionMajor: 0
+  VersionMinor: 0
+  VersionPatch: 0
+  ComponentUid: 3a1780bd-bead-45ab-9e0a-f59f9699fd32
+  ExportUid: 00000000-0000-0000-0000-000000000000
+  PackagePolicy: CanBeUnpacked
+  ScriptInputsHidden:
+    action: false
+    controllerObject: false
+  ScriptTypesHidden:
+    {}
+  ReadMe: !<reference> 00000000-0000-0000-0000-000000000000
+  DeclarationFile: !<reference> 00000000-0000-0000-0000-000000000000
+  Tags:
+    []
+  Attachments:
+    []
+  DefaultScriptInputs:
+    - controllerObject: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
+      action: melody
+  ScriptTypes:
+    -
+      {}
+  InputLines:
+    - '// @input SceneObject controllerObject {"hint":"Reference to the PromptDJ Controller SceneObject (optional if using global)"}'
+    - '// @input string action = "melody" {"hint":"Action to perform when button is pressed"}'

@@ -1,0 +1,47 @@
+- !<AssetImportMetadata/6834b74c-0bd5-41f8-b640-19a3e4ab0f22>
+  ImportedAssetIds:
+    TypeScriptAsset: !<reference> 8b9f4067-7834-4fdf-856a-f38d4567f7d8
+  ImporterName: TypeScriptAssetImporter
+  PrimaryAsset: !<reference> 8b9f4067-7834-4fdf-856a-f38d4567f7d8
+  PackageType: NotAPackage
+  LegacyPackagePolicy: ~
+  ExtraData:
+    {}
+  AssetDataMap:
+    TypeScriptAsset: !<own> 5f416879-c9f9-4cee-bf4d-c1e411f42b37
+  DependentFiles:
+    []
+  ImporterSettings: !<AssetImporterSettings>
+    {}
+  CompressionSettings: !<own> 00000000-0000-0000-0000-000000000000
+- !<TypeScriptAssetData/5f416879-c9f9-4cee-bf4d-c1e411f42b37>
+  SvgIcon: ""
+  SetupScript:
+    code: ""
+  Description: ""
+  VersionMajor: 0
+  VersionMinor: 0
+  VersionPatch: 0
+  ComponentUid: a5d76fa3-1fcc-4ffc-882e-02eaf4f23043
+  ExportUid: 00000000-0000-0000-0000-000000000000
+  PackagePolicy: CanBeUnpacked
+  ScriptInputsHidden:
+    genre: false
+    uiController: false
+  ScriptTypesHidden:
+    {}
+  ReadMe: !<reference> 00000000-0000-0000-0000-000000000000
+  DeclarationFile: !<reference> 00000000-0000-0000-0000-000000000000
+  Tags:
+    []
+  Attachments:
+    []
+  DefaultScriptInputs:
+    - uiController: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
+      genre: techno
+  ScriptTypes:
+    -
+      {}
+  InputLines:
+    - '// @input SceneObject uiController {"hint":"PromptDJ UI Controller SceneObject"}'
+    - '// @input string genre = "techno" {"hint":"Genre to trigger (techno, house, funk, jazz, etc.)"}'

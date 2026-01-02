@@ -1,0 +1,47 @@
+- !<AssetImportMetadata/ff5cc6dc-4f15-4d46-be29-84fdfab1a50c>
+  ImportedAssetIds:
+    TypeScriptAsset: !<reference> 230c6faa-4d13-4f70-865b-fc5ad3f756b4
+  ImporterName: TypeScriptAssetImporter
+  PrimaryAsset: !<reference> 230c6faa-4d13-4f70-865b-fc5ad3f756b4
+  PackageType: NotAPackage
+  LegacyPackagePolicy: ~
+  ExtraData:
+    {}
+  AssetDataMap:
+    TypeScriptAsset: !<own> f981baf9-0878-42f7-a35f-4988ceba9663
+  DependentFiles:
+    []
+  ImporterSettings: !<AssetImporterSettings>
+    {}
+  CompressionSettings: !<own> 00000000-0000-0000-0000-000000000000
+- !<TypeScriptAssetData/f981baf9-0878-42f7-a35f-4988ceba9663>
+  SvgIcon: ""
+  SetupScript:
+    code: ""
+  Description: ""
+  VersionMajor: 0
+  VersionMinor: 0
+  VersionPatch: 0
+  ComponentUid: b533349f-347a-4dcf-85b1-0a0a78cbabd2
+  ExportUid: 00000000-0000-0000-0000-000000000000
+  PackagePolicy: CanBeUnpacked
+  ScriptInputsHidden:
+    action: false
+    uiController: false
+  ScriptTypesHidden:
+    {}
+  ReadMe: !<reference> 00000000-0000-0000-0000-000000000000
+  DeclarationFile: !<reference> 00000000-0000-0000-0000-000000000000
+  Tags:
+    []
+  Attachments:
+    []
+  DefaultScriptInputs:
+    - uiController: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
+      action: start
+  ScriptTypes:
+    -
+      {}
+  InputLines:
+    - '// @input SceneObject uiController {"hint":"PromptDJ UI Controller SceneObject (can use both UI and Controller)"}'
+    - '// @input string action = "start" {"hint":"Action to perform (start, stop, random, next, previous, regenerate, bpmUp, bpmDown)"}'
