@@ -77,10 +77,23 @@ export class DynamicAudioOutput extends BaseScriptComponent {
         try {
             this.currentSampleRate = sampleRate
             this.audioOutputProvider.sampleRate = sampleRate
+            
+            // Set up audio component
             this.audComponent.audioTrack = this.audioOutputTrack
-            this.audComponent.play(-1)  // Loop indefinitely
+            this.audComponent.volume = 1.0  // Max volume
+            
+            // Stop any existing playback first
+            if (this.audComponent.isPlaying()) {
+                this.audComponent.stop(false)
+            }
+            
+            // Start playback - use 0 for infinite loop (not -1)
+            this.audComponent.play(0)
+            
             this.isInitialized = true
             print("[DynamicAudioOutput] Initialized @ " + sampleRate + " Hz")
+            print("[DynamicAudioOutput] AudioComponent playing: " + this.audComponent.isPlaying())
+            print("[DynamicAudioOutput] Volume: " + this.audComponent.volume)
             return true
         } catch (e) {
             print("[DynamicAudioOutput] Initialize error: " + e)
@@ -116,7 +129,10 @@ export class DynamicAudioOutput extends BaseScriptComponent {
         // Ensure audio is playing
         if (!this.audComponent.isPlaying()) {
             try {
-                this.audComponent.play(-1)
+                print("[DynamicAudioOutput] AudioComponent not playing, starting...")
+                this.audComponent.volume = 1.0
+                this.audComponent.play(0)  // 0 = infinite loop
+                print("[DynamicAudioOutput] Now playing: " + this.audComponent.isPlaying())
             } catch (e) {
                 print("[DynamicAudioOutput] Error resuming playback: " + e)
             }
@@ -127,7 +143,8 @@ export class DynamicAudioOutput extends BaseScriptComponent {
         
         try {
             this.audioOutputProvider.enqueueAudioFrame(data, shape)
-            print("[DynamicAudioOutput] Enqueued " + data.length + " samples")
+            print("[DynamicAudioOutput] Enqueued " + data.length + " samples (shape: " + shape.x + "x" + shape.y + "x" + shape.z + ")")
+            print("[DynamicAudioOutput] isPlaying after enqueue: " + this.audComponent.isPlaying())
         } catch (e) {
             print("[DynamicAudioOutput] Enqueue error: " + e)
         }
@@ -165,10 +182,70 @@ export class DynamicAudioOutput extends BaseScriptComponent {
     }
     
     /**
+     * Interrupts current audio and clears the buffer.
+     * Useful for stopping current playback before playing new audio.
+     */
+    public interruptAudioOutput(): void {
+        try {
+            // Stop current playback
+            if (this.audComponent && this.audComponent.isPlaying()) {
+                this.audComponent.stop(false)
+            }
+            
+            // Re-initialize to clear buffer
+            if (this.audioOutputProvider) {
+                this.audioOutputProvider.sampleRate = this.currentSampleRate
+            }
+            
+            // Restart playback loop
+            if (this.audComponent) {
+                this.audComponent.play(0)
+            }
+            
+            print("[DynamicAudioOutput] Interrupted and reset")
+        } catch (e) {
+            print("[DynamicAudioOutput] Interrupt error: " + e)
+        }
+    }
+    
+    /**
+     * Sets the volume of the audio output.
+     * @param volume Volume level from 0.0 to 1.0
+     */
+    public setVolume(volume: number): void {
+        if (this.audComponent) {
+            const clampedVolume = Math.max(0, Math.min(1, volume))
+            this.audComponent.volume = clampedVolume
+            print("[DynamicAudioOutput] Volume set to " + Math.round(clampedVolume * 100) + "%")
+        }
+    }
+    
+    /**
+     * Gets the current volume level.
+     */
+    public getVolume(): number {
+        return this.audComponent?.volume ?? 1.0
+    }
+    
+    /**
      * Checks if audio is currently playing.
      */
     public isPlaying(): boolean {
         return this.audComponent?.isPlaying() ?? false
+    }
+    
+    /**
+     * Gets the current sample rate.
+     */
+    public getSampleRate(): number {
+        return this.currentSampleRate
+    }
+    
+    /**
+     * Checks if the audio output is properly initialized.
+     */
+    public isReady(): boolean {
+        return this.isInitialized && this.audioOutputProvider !== null && this.audComponent !== null
     }
     
     /**

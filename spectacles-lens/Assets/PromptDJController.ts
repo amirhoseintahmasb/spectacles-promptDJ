@@ -87,6 +87,33 @@ interface PongMessage {
     type: "pong"
 }
 
+/** Audio start message - begins chunked audio transmission */
+interface AudioStartMessage {
+    type: "audio_start"
+    format: string
+    sample_rate: number
+    channels: number
+    sample_count: number
+    total_bytes: number
+    num_chunks: number
+    params: any
+}
+
+/** Audio chunk message - contains a piece of audio data */
+interface AudioChunkMessage {
+    type: "audio_chunk"
+    chunk_index: number
+    total_chunks: number
+    data: string  // base64 encoded chunk
+}
+
+/** Audio end message - signals completion of chunked transfer */
+interface AudioEndMessage {
+    type: "audio_end"
+    total_chunks: number
+    total_bytes: number
+}
+
 /** Union type for all WebSocket messages */
 type WebSocketMessage = 
     | ConnectedMessage 
@@ -95,6 +122,9 @@ type WebSocketMessage =
     | ErrorMessage 
     | ParamsUpdatedMessage 
     | PongMessage
+    | AudioStartMessage
+    | AudioChunkMessage
+    | AudioEndMessage
 
 /** Music generation parameters */
 export interface MusicParams {
@@ -272,6 +302,11 @@ export class PromptDJController extends BaseScriptComponent {
     private isPlaying: boolean = false
     private audioLoadAttempts: number = 0
     private readonly MAX_AUDIO_LOAD_ATTEMPTS: number = 3
+    
+    // Chunked audio state
+    private audioChunks: string[] = []
+    private audioChunkMetadata: AudioStartMessage | null = null
+    private receivedChunks: number = 0
     
     // Delayed events
     private connectDelayEvent: DelayedCallbackEvent | null = null
@@ -517,14 +552,17 @@ export class PromptDJController extends BaseScriptComponent {
             return
         }
         
-        // Validate URL structure (simple regex check)
-        const urlPattern = /^wss?:\/\/[^\/]+:\d+\/.+/
+        // Validate URL structure (accepts both local IP:PORT and cloud URLs like ngrok)
+        // Local format: ws://192.168.1.1:8123/ws/spectacles/
+        // Cloud format: wss://subdomain.ngrok-free.dev/ws/spectacles/
+        const urlPattern = /^wss?:\/\/[^\/]+\/.+/
         if (!urlPattern.test(url)) {
-            const errorMsg = "Invalid URL format - check IP and port"
+            const errorMsg = "Invalid URL format"
             log.e(errorMsg)
             log.e("URL: " + url)
-            log.e("Expected format: ws://IP:PORT/ws/spectacles/")
+            log.e("Expected format: ws://IP:PORT/ws/spectacles/ or wss://domain/ws/spectacles/")
             log.e("Example: ws://172.20.10.2:8123/ws/spectacles/")
+            log.e("Example: wss://abc.ngrok-free.dev/ws/spectacles/")
             this.updateStatusText("Invalid URL format")
             return
         }
@@ -678,6 +716,18 @@ export class PromptDJController extends BaseScriptComponent {
             case "audio_ready":
                 this.handleAudioReady(data)
                 break
+            
+            case "audio_start":
+                this.handleAudioStart(data as AudioStartMessage)
+                break
+                
+            case "audio_chunk":
+                this.handleAudioChunk(data as AudioChunkMessage)
+                break
+                
+            case "audio_end":
+                this.handleAudioEnd(data as AudioEndMessage)
+                break
                 
             case "params_updated":
                 this.updateStatusText("Params Updated")
@@ -753,6 +803,95 @@ export class PromptDJController extends BaseScriptComponent {
         
         this.onAudioReadyEvent.invoke(url)
         this.loadAndPlayAudio(url)
+    }
+    
+    /**
+     * Handle the start of chunked audio transmission.
+     * Resets state and stores metadata.
+     */
+    private handleAudioStart(data: AudioStartMessage): void {
+        log.i("Audio streaming started!")
+        log.i("  Format: " + data.format)
+        log.i("  Sample Rate: " + data.sample_rate)
+        log.i("  Channels: " + data.channels)
+        log.i("  Samples: " + data.sample_count)
+        log.i("  Total Bytes: " + data.total_bytes)
+        log.i("  Chunks: " + data.num_chunks)
+        
+        // Reset chunked audio state
+        this.audioChunks = new Array(data.num_chunks)
+        this.audioChunkMetadata = data
+        this.receivedChunks = 0
+        
+        this.updateStatusText("Receiving audio...")
+    }
+    
+    /**
+     * Handle an audio chunk - store it for later assembly.
+     */
+    private handleAudioChunk(data: AudioChunkMessage): void {
+        if (!this.audioChunkMetadata) {
+            log.e("Received audio chunk without audio_start!")
+            return
+        }
+        
+        // Store chunk at its index
+        this.audioChunks[data.chunk_index] = data.data
+        this.receivedChunks++
+        
+        // Update progress every 10 chunks
+        if (this.receivedChunks % 10 === 0 || this.receivedChunks === data.total_chunks) {
+            const progress = Math.round((this.receivedChunks / data.total_chunks) * 100)
+            this.updateStatusText("Receiving: " + progress + "%")
+            log.d("Audio chunk " + this.receivedChunks + "/" + data.total_chunks)
+        }
+    }
+    
+    /**
+     * Handle the end of chunked audio transmission.
+     * Assembles all chunks and plays the audio.
+     */
+    private handleAudioEnd(data: AudioEndMessage): void {
+        log.i("Audio streaming complete!")
+        log.i("  Received " + this.receivedChunks + " chunks")
+        
+        if (!this.audioChunkMetadata) {
+            log.e("Received audio_end without audio_start!")
+            return
+        }
+        
+        // Verify we got all chunks
+        if (this.receivedChunks !== data.total_chunks) {
+            log.e("Missing chunks! Got " + this.receivedChunks + " of " + data.total_chunks)
+            this.updateStatusText("Audio incomplete")
+            this.onAudioErrorEvent.invoke("Missing audio chunks")
+            return
+        }
+        
+        // Assemble all chunks into one base64 string
+        this.updateStatusText("Processing audio...")
+        log.i("Assembling " + data.total_chunks + " audio chunks...")
+        
+        const fullBase64 = this.audioChunks.join("")
+        log.i("  Total base64 length: " + fullBase64.length)
+        
+        // Create AudioReadyMessage format for playback
+        const audioData: AudioReadyMessage = {
+            type: "audio_ready",
+            format: "pcm16",
+            audio_base64: fullBase64,
+            sample_rate: this.audioChunkMetadata.sample_rate,
+            channels: this.audioChunkMetadata.channels,
+            sample_count: this.audioChunkMetadata.sample_count
+        }
+        
+        // Clear chunked state
+        this.audioChunks = []
+        this.audioChunkMetadata = null
+        this.receivedChunks = 0
+        
+        // Play the assembled audio
+        this.playPCM16Audio(audioData)
     }
     
     /**

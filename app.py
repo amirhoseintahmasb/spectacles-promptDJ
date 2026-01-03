@@ -755,6 +755,67 @@ def generate_audio_pcm16_from_midi(midi_path: str, sample_rate: int = 48000) -> 
     }
 
 
+async def send_audio_chunked(websocket, manager, pcm_data: dict, params: dict, chunk_size: int = 32768):
+    """
+    Send PCM16 audio in chunks to avoid WebSocket message size limits on Spectacles.
+    
+    Args:
+        websocket: WebSocket connection
+        manager: ConnectionManager
+        pcm_data: dict with audio_base64, sample_rate, channels, sample_count
+        params: dict with generation parameters
+        chunk_size: size of each chunk in bytes (before base64, ~32KB is safe)
+    """
+    audio_base64 = pcm_data["audio_base64"]
+    
+    # Decode base64 to get raw bytes
+    audio_bytes = base64.b64decode(audio_base64)
+    total_bytes = len(audio_bytes)
+    
+    # Calculate number of chunks
+    num_chunks = (total_bytes + chunk_size - 1) // chunk_size
+    
+    print(f"Sending audio in {num_chunks} chunks ({total_bytes} bytes total)")
+    
+    # Send audio_start message with metadata
+    await manager.send_json(websocket, {
+        "type": "audio_start",
+        "format": "pcm16",
+        "sample_rate": pcm_data["sample_rate"],
+        "channels": pcm_data["channels"],
+        "sample_count": pcm_data["sample_count"],
+        "total_bytes": total_bytes,
+        "num_chunks": num_chunks,
+        "params": params
+    })
+    
+    # Send chunks
+    for i in range(num_chunks):
+        start = i * chunk_size
+        end = min(start + chunk_size, total_bytes)
+        chunk_bytes = audio_bytes[start:end]
+        chunk_base64 = base64.b64encode(chunk_bytes).decode('ascii')
+        
+        await manager.send_json(websocket, {
+            "type": "audio_chunk",
+            "chunk_index": i,
+            "total_chunks": num_chunks,
+            "data": chunk_base64
+        })
+        
+        # Small delay to prevent overwhelming the connection
+        await asyncio.sleep(0.01)
+    
+    # Send audio_end message
+    await manager.send_json(websocket, {
+        "type": "audio_end",
+        "total_chunks": num_chunks,
+        "total_bytes": total_bytes
+    })
+    
+    print(f"Finished sending {num_chunks} audio chunks")
+
+
 def render_midi_to_wav_48k(midi_path: str, sample_rate: int = 48000) -> str:
     """
     Render MIDI to WAV at 48kHz for Spectacles compatibility.
@@ -979,21 +1040,13 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                     # Clean up MIDI file
                     os.unlink(midi_path)
                     
-                    # Send PCM16 audio data directly (for DynamicAudioOutput)
-                    await manager.send_json(websocket, {
-                        "type": "audio_ready",
-                        "format": "pcm16",
-                        "audio_base64": pcm_data["audio_base64"],
-                        "sample_rate": pcm_data["sample_rate"],
-                        "channels": pcm_data["channels"],
-                        "sample_count": pcm_data["sample_count"],
-                        "params": {
-                            "tempo_bpm": req.tempo_bpm,
-                            "bars": req.bars,
-                            "scale": req.scale,
-                            "density": req.density,
-                            "variation": req.variation
-                        }
+                    # Send PCM16 audio in chunks (for DynamicAudioOutput on Spectacles)
+                    await send_audio_chunked(websocket, manager, pcm_data, {
+                        "tempo_bpm": req.tempo_bpm,
+                        "bars": req.bars,
+                        "scale": req.scale,
+                        "density": req.density,
+                        "variation": req.variation
                     })
                     print(f"Sent PCM16 audio: {pcm_data['sample_count']} samples @ {pcm_data['sample_rate']}Hz")
                 except Exception as e:
@@ -1025,20 +1078,12 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                     # Clean up MIDI file
                     os.unlink(midi_path)
                     
-                    # Send PCM16 audio data directly (for DynamicAudioOutput)
-                    await manager.send_json(websocket, {
-                        "type": "audio_ready",
-                        "format": "pcm16",
-                        "audio_base64": pcm_data["audio_base64"],
-                        "sample_rate": pcm_data["sample_rate"],
-                        "channels": pcm_data["channels"],
-                        "sample_count": pcm_data["sample_count"],
-                        "params": {
-                            "tempo_bpm": req.tempo_bpm,
-                            "bars": req.bars,
-                            "style": req.style,
-                            "swing": req.swing
-                        }
+                    # Send PCM16 audio in chunks (for DynamicAudioOutput on Spectacles)
+                    await send_audio_chunked(websocket, manager, pcm_data, {
+                        "tempo_bpm": req.tempo_bpm,
+                        "bars": req.bars,
+                        "style": req.style,
+                        "swing": req.swing
                     })
                     print(f"Sent PCM16 drums: {pcm_data['sample_count']} samples @ {pcm_data['sample_rate']}Hz")
                 except Exception as e:
@@ -1079,21 +1124,12 @@ async def websocket_spectacles(websocket: WebSocket, client_id: str):
                     drums_pcm = generate_audio_pcm16_from_midi(drums_midi_path, sample_rate=48000)
                     os.unlink(drums_midi_path)
                     
-                    # Send melody first (for now - could mix them later)
-                    await manager.send_json(websocket, {
-                        "type": "audio_ready",
-                        "format": "pcm16",
-                        "audio_base64": melody_pcm["audio_base64"],
-                        "sample_rate": melody_pcm["sample_rate"],
-                        "channels": melody_pcm["channels"],
-                        "sample_count": melody_pcm["sample_count"],
-                        "has_drums": True,
-                        "params": {
-                            "tempo_bpm": melody_req.tempo_bpm,
-                            "bars": melody_req.bars,
-                            "scale": melody_req.scale,
-                            "drum_style": drums_req.style
-                        }
+                    # Send melody in chunks (for now - could mix with drums later)
+                    await send_audio_chunked(websocket, manager, melody_pcm, {
+                        "tempo_bpm": melody_req.tempo_bpm,
+                        "bars": melody_req.bars,
+                        "scale": melody_req.scale,
+                        "drum_style": drums_req.style
                     })
                     print(f"Sent PCM16 melody: {melody_pcm['sample_count']} samples")
                     
